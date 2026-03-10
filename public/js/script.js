@@ -21,6 +21,8 @@ const els = {
   labelsSelectNoneBtn: document.getElementById('labelsSelectNoneBtn'),
   loadLabelsBtn: document.getElementById('loadLabelsBtn'),
   clearBrowserBtn: document.getElementById('clearBrowserBtn'),
+  showRecurring: document.getElementById('showRecurring'),
+  projectionWeeks: document.getElementById('projectionWeeks'),
 };
 els.labelsPicker.innerHTML = '<div class="small">Press “Load labels” to populate.</div>';
 
@@ -34,6 +36,8 @@ function saveConfigToStorage() {
   const payload = {
     dateField: cfg.dateField,
     labelSelectionById: labelSelectionById,
+    showRecurring: cfg.showRecurring,
+    projectionWeeks: cfg.projectionWeeks,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
@@ -50,6 +54,15 @@ function loadConfigFromStorage() {
     }
 
     if (payload.dateField) els.dateField.value = payload.dateField;
+    
+    // Load recurring event settings
+    if (payload.showRecurring !== undefined) {
+      els.showRecurring.checked = payload.showRecurring;
+    }
+    
+    if (payload.projectionWeeks) {
+      els.projectionWeeks.value = payload.projectionWeeks;
+    }
 
     return true;
   } catch {
@@ -91,6 +104,8 @@ async function fetchServerConfig() {
 
 function config() {
   const dateField = els.dateField.value;
+  const showRecurring = els.showRecurring.checked;
+  const projectionWeeks = parseInt(els.projectionWeeks.value, 10) || 4;
 
   const labelSelectionCopy = { ...(labelSelectionById || {}) };
   const selectedLabelIds = new Set(
@@ -99,14 +114,23 @@ function config() {
       .map(([k]) => String(k))
   );
 
-  return { dateField, labelSelectionById: labelSelectionCopy, selectedLabelIds };
+  return { 
+    dateField, 
+    labelSelectionById: labelSelectionCopy, 
+    selectedLabelIds,
+    showRecurring,
+    projectionWeeks
+  };
 }
 
 function configHash(cfg) {
   // minimal hash to detect config drift
   return JSON.stringify({ 
     d: cfg.dateField, 
-    l: cfg.labelSelectionById });
+    l: cfg.labelSelectionById,
+    r: cfg.showRecurring,
+    p: cfg.projectionWeeks
+  });
 }
 
 // No longer needed as headers are handled by the server
@@ -635,13 +659,18 @@ function generateRecurringProjections(task, baseDate, cfg) {
     return projections;
   }
   
+  // If recurring events are disabled, return empty array
+  if (!cfg.showRecurring) {
+    return projections;
+  }
+  
   const color = pickEventColor(task);
   const secondsInDay = 86400; // 24 * 60 * 60
   
-  // Generate projections for the next 6 months (adjust as needed)
+  // Calculate end date based on projection weeks setting
   const today = new Date();
-  const sixMonthsLater = new Date(today);
-  sixMonthsLater.setMonth(today.getMonth() + 6);
+  const projectionEndDate = new Date(today);
+  projectionEndDate.setDate(today.getDate() + (cfg.projectionWeeks * 7));
   
   // Start with the base date
   let currentDate = new Date(baseDate);
@@ -652,7 +681,7 @@ function generateRecurringProjections(task, baseDate, cfg) {
     const nextDate = new Date(currentDate.getTime() + (task.repeat_after * 1000));
     
     // Stop if we've gone beyond our projection window
-    if (nextDate > sixMonthsLater) break;
+    if (nextDate > projectionEndDate) break;
     
     projections.push({
       title: `${task.title || `(task ${task.id})`} (recurring)`,
@@ -1006,6 +1035,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 // Persist settings as you type/change
 ['input', 'change'].forEach(evt => {
   els.dateField.addEventListener(evt, saveConfigToStorage);
+  els.showRecurring.addEventListener(evt, () => {
+    saveConfigToStorage();
+    refreshUIFromCache(config());
+  });
+  els.projectionWeeks.addEventListener(evt, () => {
+    saveConfigToStorage();
+    refreshUIFromCache(config());
+  });
 });
 
 els.clearBrowserBtn.addEventListener('click', () => {
@@ -1022,6 +1059,10 @@ els.clearBrowserBtn.addEventListener('click', () => {
 
   // Clear input fields
   els.dateField.value = 'due_date';
+  
+  // Reset recurring event settings
+  els.showRecurring.checked = true;
+  els.projectionWeeks.value = '4';
 
   // Reset label UI
   if (els.labelsPicker) els.labelsPicker.innerHTML = '';

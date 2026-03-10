@@ -51,6 +51,28 @@
           </select>
         </div>
 
+        <div class="row">
+          <div class="labelRow">
+            <label for="recurringOptions">Recurring events</label>
+            <span class="infoDot" title="Configure how recurring events are displayed in the calendar">i</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <input type="checkbox" id="showRecurring" checked
+                   title="Show or hide recurring event projections in the calendar">
+            <label for="showRecurring">Show recurring events</label>
+          </div>
+          <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
+            <label for="projectionWeeks">Project for</label>
+            <select id="projectionWeeks" title="Number of weeks to project recurring events into the future">
+              <option value="2">2 weeks</option>
+              <option value="4" selected>4 weeks</option>
+              <option value="6">6 weeks</option>
+              <option value="8">8 weeks</option>
+              <option value="12">12 weeks</option>
+            </select>
+          </div>
+        </div>
+
         <div class="actions">
           <button class="primary" id="loadBtn">Load tasks</button>
           <button id="loadLabelsBtn">Load labels</button>
