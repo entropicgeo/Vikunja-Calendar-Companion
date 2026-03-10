@@ -497,6 +497,34 @@ function ensureCalendar() {
     eventStartEditable: true,
     eventDurationEditable: false,
     eventResizableFromStart: false,
+    
+    // Custom event rendering for recurring projections
+    eventDidMount: (arg) => {
+      // Make label colors visible (background + border)
+      const c = arg.event.backgroundColor || arg.event.borderColor;
+      if (c) {
+        arg.el.style.backgroundColor = c;
+        arg.el.style.borderColor = c;
+      }
+      arg.el.style.borderRadius = '10px';
+      arg.el.style.borderWidth = '1px';
+      
+      // Special styling for recurring projections
+      if (arg.event.extendedProps?.isProjection) {
+        // Add dashed border
+        arg.el.style.borderStyle = 'dashed';
+        
+        // Add a small recurring icon
+        const titleEl = arg.el.querySelector('.fc-event-title');
+        if (titleEl) {
+          const iconSpan = document.createElement('span');
+          iconSpan.innerHTML = ' ↻';
+          iconSpan.style.fontSize = '0.85em';
+          iconSpan.title = 'Recurring event projection';
+          titleEl.appendChild(iconSpan);
+        }
+      }
+    },
 
     drop: async (info) => {
       // external drop from unscheduled list into calendar
@@ -583,16 +611,6 @@ function ensureCalendar() {
       }
     },
 
-    eventDidMount: (arg) => {
-      // Make label colors visible (background + border)
-      const c = arg.event.backgroundColor || arg.event.borderColor;
-      if (c) {
-        arg.el.style.backgroundColor = c;
-        arg.el.style.borderColor = c;
-      }
-      arg.el.style.borderRadius = '10px';
-      arg.el.style.borderWidth = '1px';
-    },
     
     eventReceive: (info) => {
       // Remove the auto-created event immediately; we render from our cache instead.
@@ -973,3 +991,15 @@ if (els.unscheduledList) {
 if (els.unscheduledDrop) {
   els.unscheduledDrop.style.touchAction = 'pan-y';
 }
+
+// Add CSS for recurring projections
+const recurringStyle = document.createElement('style');
+recurringStyle.textContent = `
+  .recurring-projection {
+    opacity: 0.8;
+  }
+  .recurring-projection:hover {
+    opacity: 1;
+  }
+`;
+document.head.appendChild(recurringStyle);
