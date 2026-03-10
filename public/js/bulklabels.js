@@ -130,59 +130,58 @@ async function updateTaskLabels(taskId, labelIds, operation) {
     setStatus(`Updating task ${taskId}...`);
     
     try {
-        // First get the current task data
-        const url = new URL(`/api/tasks/${taskId}`, window.location.origin);
-        const response = await fetch(url.toString());
+        // For bulk label operations, we only need the label IDs
+        let labelsToUpdate = [];
         
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(`Failed to fetch task ${taskId} (${response.status}): ${text}`);
-        }
-        
-        const task = await response.json();
-        
-        // Get current label IDs
-        const currentLabelIds = (task.labels || []).map(label => label.id);
-        
-        // Update labels based on operation
-        let newLabelIds;
         if (operation === 'add') {
-            // Add selected labels that aren't already on the task
-            newLabelIds = [...new Set([...currentLabelIds, ...labelIds])];
+            // For adding, we just need to send the labels we want to add
+            labelsToUpdate = labelIds.map(id => {
+                return { id };
+            });
         } else if (operation === 'remove') {
-            // Remove selected labels from the task
-            newLabelIds = currentLabelIds.filter(id => !labelIds.includes(id));
+            // For removing, we need to get the current task first to know which labels to keep
+            const url = new URL(`/api/tasks/${taskId}`, window.location.origin);
+            const response = await fetch(url.toString());
+            
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(`Failed to fetch task ${taskId} (${response.status}): ${text}`);
+            }
+            
+            const task = await response.json();
+            
+            // Get current label IDs
+            const currentLabelIds = (task.labels || []).map(label => label.id);
+            
+            // Keep only labels that are not in the removal list
+            const newLabelIds = currentLabelIds.filter(id => !labelIds.includes(id));
+            
+            // Create label objects for the API
+            labelsToUpdate = newLabelIds.map(id => {
+                return { id };
+            });
         }
         
-        // Create label objects for the API
-        const newLabels = newLabelIds.map(id => {
-            const label = allLabels.find(l => l.id === id);
-            return { id };
-        });
-        
-        // Update the task
-        const updateUrl = new URL(`/api/tasks/${taskId}`, window.location.origin);
-        console.log(updateUrl);
+        // Use the bulk labels endpoint
+        const updateUrl = new URL(`/api/tasks/${taskId}/labels/bulk`, window.location.origin);
         const updateResponse = await fetch(updateUrl.toString(), {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                ...task,
-                labels: newLabels
+                labels: labelsToUpdate
             })
         });
-        console.log(updateResponse);
         
         if (!updateResponse.ok) {
             const text = await updateResponse.text();
-            throw new Error(`Failed to update task ${taskId} (${updateResponse.status}): ${text}`);
+            throw new Error(`Failed to update labels for task ${taskId} (${updateResponse.status}): ${text}`);
         }
         
         return await updateResponse.json();
     } catch (error) {
-        throw new Error(`Error updating task ${taskId}: ${error.message}`);
+        throw new Error(`Error updating labels for task ${taskId}: ${error.message}`);
     }
 }
 
@@ -425,7 +424,7 @@ function setupEventListeners() {
                     await updateTaskLabels(taskId, labelIds, 'add');
                     successCount++;
                 } catch (error) {
-                    console.error(`Error updating task ${taskId}:`, error);
+                    console.error(`Error updating labels for task ${taskId}:`, error);
                     errorCount++;
                 }
             }
@@ -463,7 +462,7 @@ function setupEventListeners() {
                     await updateTaskLabels(taskId, labelIds, 'remove');
                     successCount++;
                 } catch (error) {
-                    console.error(`Error updating task ${taskId}:`, error);
+                    console.error(`Error updating labels for task ${taskId}:`, error);
                     errorCount++;
                 }
             }
