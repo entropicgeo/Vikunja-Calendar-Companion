@@ -169,7 +169,6 @@ app.post('/api/tasks/:taskId/labels/bulk', async (req, res) => {
     }
     
     const url = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/labels/bulk`;
-    console.log(payload);
     const response = await fetch(url, {
       method: 'POST',
       headers: {
