@@ -162,6 +162,7 @@ async function updateTaskLabels(taskId, labelIds, operation) {
         
         // Update the task
         const updateUrl = new URL(`/api/tasks/${taskId}`, window.location.origin);
+        console.log(updateUrl);
         const updateResponse = await fetch(updateUrl.toString(), {
             method: 'POST',
             headers: {
@@ -172,6 +173,7 @@ async function updateTaskLabels(taskId, labelIds, operation) {
                 labels: newLabels
             })
         });
+        console.log(updateResponse);
         
         if (!updateResponse.ok) {
             const text = await updateResponse.text();

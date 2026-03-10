@@ -121,11 +121,13 @@ app.get('/api/tasks/:taskId', async (req, res) => {
 });
 
 app.post('/api/tasks/:taskId', async (req, res) => {
+  console.log(req);
   try {
     const baseUrl = process.env.API_BASE_URL;
     const token = process.env.API_TOKEN;
     const taskId = req.params.taskId;
     const payload = req.body;
+    console.log("Got task update", payload);
     
     if (!baseUrl || !token) {
       return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
@@ -142,6 +144,7 @@ app.post('/api/tasks/:taskId', async (req, res) => {
       },
       body: JSON.stringify(payload)
     });
+    console.log(response);
     
     if (!response.ok) {
       const text = await response.text();
