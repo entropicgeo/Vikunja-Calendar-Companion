@@ -659,6 +659,7 @@ function generateRecurringProjections(task, baseDate, cfg) {
     return projections;
   }
   
+  
   // If recurring events are disabled, return empty array
   if (!cfg.showRecurring) {
     return projections;
