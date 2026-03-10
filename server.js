@@ -121,13 +121,11 @@ app.get('/api/tasks/:taskId', async (req, res) => {
 });
 
 app.post('/api/tasks/:taskId', async (req, res) => {
-  console.log(req);
   try {
     const baseUrl = process.env.API_BASE_URL;
     const token = process.env.API_TOKEN;
     const taskId = req.params.taskId;
     const payload = req.body;
-    console.log("Got task update", payload);
     
     if (!baseUrl || !token) {
       return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
@@ -144,7 +142,6 @@ app.post('/api/tasks/:taskId', async (req, res) => {
       },
       body: JSON.stringify(payload)
     });
-    console.log(response);
     
     if (!response.ok) {
       const text = await response.text();
@@ -155,6 +152,43 @@ app.post('/api/tasks/:taskId', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error(`Error updating task ${req.params.taskId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Bulk update labels for a task
+app.post('/api/tasks/:taskId/labels/bulk', async (req, res) => {
+  try {
+    const baseUrl = process.env.API_BASE_URL;
+    const token = process.env.API_TOKEN;
+    const taskId = req.params.taskId;
+    const payload = req.body;
+    
+    if (!baseUrl || !token) {
+      return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
+    }
+    
+    const url = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/labels/bulk`;
+    
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).send(text);
+    }
+    
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error(`Error updating labels for task ${req.params.taskId}:`, error);
     res.status(500).json({ error: error.message });
   }
 });
