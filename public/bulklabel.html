@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk Label Manager</title>
+    <link rel="stylesheet" href="styles/bulklabels.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Bulk Label Manager</h1>
+            <a href="/" class="back-link">Back to Calendar</a>
+        </header>
+
+        <div class="main-content">
+            <div class="panel tasks-panel">
+                <h2>Tasks</h2>
+                <div class="filter-controls">
+                    <input type="text" id="task-filter" placeholder="Filter tasks...">
+                    <div class="selection-controls">
+                        <button id="select-all">Select All</button>
+                        <button id="select-none">Clear Selection</button>
+                    </div>
+                </div>
+                <div id="tasks-container" class="list-container">
+                    <div class="loading">Loading tasks...</div>
+                </div>
+            </div>
+
+            <div class="panel labels-panel">
+                <h2>Labels</h2>
+                <div class="filter-controls">
+                    <input type="text" id="label-filter" placeholder="Filter labels...">
+                </div>
+                <div id="labels-container" class="list-container">
+                    <div class="loading">Loading labels...</div>
+                </div>
+                <div class="action-buttons">
+                    <button id="apply-labels" class="primary-button">Apply Selected Labels</button>
+                    <button id="remove-labels" class="danger-button">Remove Selected Labels</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="status-bar" class="status-bar"></div>
+    </div>
+
+    <script src="js/bulklabels.js"></script>
+</body>
+</html>
