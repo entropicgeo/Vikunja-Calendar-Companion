@@ -626,6 +626,55 @@ function ensureCalendar() {
   calendar.render();
 }
 
+// Generate recurring event projections for a given task
+function generateRecurringProjections(task, baseDate, cfg) {
+  const projections = [];
+  
+  // Only process tasks with repeat_after > 0
+  if (!task.repeat_after || task.repeat_after <= 0) {
+    return projections;
+  }
+  
+  const color = pickEventColor(task);
+  const secondsInDay = 86400; // 24 * 60 * 60
+  
+  // Generate projections for the next 6 months (adjust as needed)
+  const today = new Date();
+  const sixMonthsLater = new Date(today);
+  sixMonthsLater.setMonth(today.getMonth() + 6);
+  
+  // Start with the base date
+  let currentDate = new Date(baseDate);
+  
+  // Generate up to 50 projections (safety limit)
+  for (let i = 0; i < 50; i++) {
+    // Add repeat_after seconds to the current date
+    const nextDate = new Date(currentDate.getTime() + (task.repeat_after * 1000));
+    
+    // Stop if we've gone beyond our projection window
+    if (nextDate > sixMonthsLater) break;
+    
+    projections.push({
+      title: `${task.title || `(task ${task.id})`} (recurring)`,
+      start: nextDate,
+      allDay: true,
+      backgroundColor: color ? `${color}80` : undefined, // 50% opacity
+      borderColor: color || undefined,
+      borderDashed: true,
+      classNames: ['recurring-projection'],
+      extendedProps: { 
+        taskId: task.id,
+        isProjection: true
+      }
+    });
+    
+    // Move to the next date
+    currentDate = nextDate;
+  }
+  
+  return projections;
+}
+
 async function refreshUIFromCache(cfg) {
   ensureCalendar();
 
@@ -648,6 +697,8 @@ async function refreshUIFromCache(cfg) {
     if (!dt) continue;
 
     const color = pickEventColor(t);
+    
+    // Add the actual scheduled event
     calendar.addEvent({
       title: t.title || `(task ${t.id})`,
       start: dt,
@@ -656,6 +707,12 @@ async function refreshUIFromCache(cfg) {
       borderColor: color || undefined,
       extendedProps: { taskId: t.id }
     });
+    
+    // Generate and add recurring projections if applicable
+    if (t.repeat_after && t.repeat_after > 0) {
+      const projections = generateRecurringProjections(t, dt, cfg);
+      projections.forEach(projection => calendar.addEvent(projection));
+    }
   }
 
   // Render unscheduled list
