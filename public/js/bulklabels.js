@@ -130,14 +130,36 @@ async function updateTaskLabels(taskId, labelIds, operation) {
     setStatus(`Updating task ${taskId}...`);
     
     try {
-        // For bulk label operations, we only need the label IDs
+        // For bulk label operations, we need the full label objects
         let labelsToUpdate = [];
         
         if (operation === 'add') {
-            // For adding, we just need to send the labels we want to add
-            labelsToUpdate = labelIds.map(id => {
-                return { id };
-            });
+            // For adding, we need to get the current task first to know which labels are already applied
+            const url = new URL(`/api/tasks/${taskId}`, window.location.origin);
+            const response = await fetch(url.toString());
+            
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(`Failed to fetch task ${taskId} (${response.status}): ${text}`);
+            }
+            
+            const task = await response.json();
+            
+            // Get current label IDs to avoid duplicates
+            const currentLabelIds = new Set((task.labels || []).map(label => label.id));
+            
+            // Start with existing labels
+            labelsToUpdate = [...(task.labels || [])];
+            
+            // Add new labels that aren't already on the task
+            for (const labelId of labelIds) {
+                if (!currentLabelIds.has(labelId)) {
+                    const label = allLabels.find(l => l.id === labelId);
+                    if (label) {
+                        labelsToUpdate.push(label);
+                    }
+                }
+            }
         } else if (operation === 'remove') {
             // For removing, we need to get the current task first to know which labels to keep
             const url = new URL(`/api/tasks/${taskId}`, window.location.origin);
@@ -150,16 +172,8 @@ async function updateTaskLabels(taskId, labelIds, operation) {
             
             const task = await response.json();
             
-            // Get current label IDs
-            const currentLabelIds = (task.labels || []).map(label => label.id);
-            
             // Keep only labels that are not in the removal list
-            const newLabelIds = currentLabelIds.filter(id => !labelIds.includes(id));
-            
-            // Create label objects for the API
-            labelsToUpdate = newLabelIds.map(id => {
-                return { id };
-            });
+            labelsToUpdate = (task.labels || []).filter(label => !labelIds.includes(label.id));
         }
         
         // Use the bulk labels endpoint
