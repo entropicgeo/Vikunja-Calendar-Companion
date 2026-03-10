@@ -1,0 +1,281 @@
+:root {
+  --bg: #0b0c10;
+  --panel: #12141a;
+  --panel2: #161a22;
+  --text: #e9eef7;
+  --muted: #aab4c5;
+  --border: #2a3140;
+  --accent: #4f8cff;
+  --danger: #ff4f6d;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+  background: var(--bg);
+  color: var(--text);
+}
+header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0));
+}
+header h1 {
+  margin: 0;
+  font-size: 16px;
+  letter-spacing: .2px;
+  font-weight: 650;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  height: calc(100vh - 50px);
+  gap: 0;
+}
+
+.left {
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  min-width: 320px;
+}
+
+.config {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel2);
+}
+.row { display: grid; grid-template-columns: 1fr; gap: 6px; margin-bottom: 10px; }
+label { font-size: 12px; color: var(--muted); }
+input, select, textarea, button {
+  font: inherit;
+  font-size: 13px;
+}
+input, select, textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.03);
+  color: var(--text);
+  outline: none;
+}
+textarea { resize: vertical; min-height: 70px; }
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+button {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  cursor: pointer;
+  transition: transform .03s ease, background .15s ease;
+  user-select: none;
+}
+button:hover { background: rgba(255,255,255,0.09); }
+button:active { transform: translateY(1px); }
+button.primary {
+  border-color: rgba(79,140,255,0.55);
+  background: rgba(79,140,255,0.18);
+}
+button.danger {
+  border-color: rgba(255,79,109,0.55);
+  background: rgba(255,79,109,0.14);
+}
+
+.status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+.hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+  line-height: 1.35;
+}
+.hint code {
+  background: rgba(255,255,255,0.06);
+  padding: 1px 6px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.unscheduled {
+  padding: 10px 12px;
+  flex: 1;
+  overflow: auto;
+}
+.unscheduled h2 {
+  margin: 0 0 8px 0;
+  font-size: 13px;
+  font-weight: 650;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+.badge {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.dropzone {
+  border: 1px dashed rgba(255,255,255,0.22);
+  border-radius: 12px;
+  padding: 10px;
+  margin-bottom: 10px;
+  color: var(--muted);
+  background: rgba(255,255,255,0.02);
+}
+.dropzone.active {
+  border-color: rgba(255,79,109,0.8);
+  color: var(--text);
+  background: rgba(255,79,109,0.08);
+}
+
+.task {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: rgba(255,255,255,0.03);
+  cursor: grab;
+  user-select: none;
+}
+.task:active { cursor: grabbing; }
+.task .title { font-size: 13px; font-weight: 620; margin-bottom: 5px; }
+.task .meta { font-size: 11px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px; }
+.pill {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,0.04);
+}
+
+.right {
+  background: #0b0c10;
+  padding: 12px;
+}
+#calendar {
+  height: calc(100vh - 74px);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(255,255,255,0.02);
+}
+
+.fc .fc-toolbar-title { font-size: 16px; }
+.fc .fc-button { border-radius: 10px; }
+
+.small {
+  font-size: 11px;
+  color: var(--muted);
+}
+/* Make selects readable in dark mode */
+select {
+  background-color: #12141a;   /* solid, not translucent */
+  color: #e9eef7;
+  border: 1px solid var(--border);
+}
+
+/* Most browsers use OS/native dropdown styling; this helps the open menu */
+select option {
+  background-color: #12141a;
+  color: #e9eef7;
+}
+
+/* Improve focus visibility */
+input:focus, select:focus, textarea:focus {
+  border-color: rgba(79,140,255,0.7);
+  box-shadow: 0 0 0 3px rgba(79,140,255,0.18);
+}
+
+/* Optional: slightly increase contrast for inputs too */
+input, textarea {
+  background-color: #12141a;
+}
+
+.labelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.infoDot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+  cursor: help;
+  user-select: none;
+  background: rgba(255,255,255,0.03);
+}
+
+/* Collapsible config */
+.config details {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+}
+
+.configSummary {
+  list-style: none;            /* helps some browsers */
+  cursor: pointer;
+  user-select: none;
+  padding: 10px 12px;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--text);
+}
+
+.configSummaryHint {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 55%;
+}
+
+/* Remove default marker and add your own chevron */
+.configSummary::-webkit-details-marker { display: none; }
+.configSummary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 8px;
+  color: var(--muted);
+  transform-origin: center;
+  transition: transform 0.12s ease;
+}
+
+.config details[open] > .configSummary::before {
+  transform: rotate(90deg);
+}
+
+.configBody {
+  padding: 12px;
+  border-top: 1px solid var(--border);
+}
+
+/* When collapsed, keep it compact */
+.config details:not([open]) .configBody {
+  display: none;
+}

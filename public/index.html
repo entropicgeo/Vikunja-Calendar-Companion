@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vikunja ↔ Calendar (one-page)</title>
+
+  <!-- FullCalendar (CDN) -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/interaction@6.1.15/index.global.min.js"></script>
+
+  <link rel="stylesheet" href="styles/style.css">
+</head>
+
+<body>
+  <header>
+    <h1>Vikunja ↔ Calendar (drag/drop schedules)</h1>
+  </header>
+
+  <div class="app">
+    <aside class="left">
+      <div class="config">
+      <details id="configDetails" open>
+        <summary class="configSummary">
+          <span>Configuration</span>
+          <span class="configSummaryHint">Base URL / Token / Labels / Date field</span>
+        </summary>
+
+        <div class="configBody">
+        <div class="row">
+          <label>Label filter</label>
+          <div class="small">Uncheck labels to exclude them. New labels default to included.</div>
+          <div class="actions" style="margin-top:6px;">
+            <button type="button" id="labelsSelectAllBtn">Select all</button>
+            <button type="button" id="labelsSelectNoneBtn">Select none</button>
+          </div>
+          <div id="labelsPicker" style="margin-top:8px; max-height:220px; overflow:auto; border:1px solid var(--border); border-radius:12px; padding:8px; background:rgba(255,255,255,0.02);"></div>
+        </div>
+
+        <div class="row">
+          <div class="labelRow">
+            <label for="dateField">Vikunja date field to use</label>
+            <span class="infoDot" title="Which task date field this app reads/writes. Scheduling sets this field; unscheduling clears this field. Other date fields are preserved.">i</span>
+          </div>
+          <select id="dateField"
+                  title="Pick the single Vikunja date field this calendar controls (start/end/due). Tasks missing this field appear as 'Unscheduled'.">
+            <option value="start_date">Start date</option>
+            <option value="end_date">End date</option>
+            <option value="due_date" selected>Due date</option>
+          </select>
+        </div>
+
+        <div class="actions">
+          <button class="primary" id="loadBtn">Load tasks</button>
+          <button id="loadLabelsBtn">Load labels</button>
+          <button id="clearBtn">Clear</button>
+          <button class="danger" id="clearBrowserBtn" title="Clears saved settings in this browser (localStorage), including UI URL, label selections, and config collapse state.">
+              Clear browser data
+          </button>
+        </div>
+
+        <div class="hint">
+          Drag unscheduled tasks into the calendar to set the chosen date field.<br/>
+          Drag calendar items to move dates; drag into the “Unscheduled” box to clear the date field.<br/>
+          If you see CORS errors: serve this HTML from the same origin as Vikunja, or use a reverse proxy.
+        </div>
+
+        <div class="status" id="status"></div>
+      </div>
+
+      </details>
+      </div>
+      <div class="unscheduled">
+        <h2>
+          <span>Unscheduled</span>
+          <span class="badge" id="unscheduledCount">0</span>
+        </h2>
+
+        <div class="dropzone" id="unscheduledDrop" style="touch-action: pan-y;">
+          Drop here to unschedule (clear selected date field).
+        </div>
+
+        <div id="unscheduledList" style="touch-action: pan-y;"></div>
+      </div>
+    </aside>
+
+    <main class="right">
+      <div id="calendar"></div>
+    </main>
+  </div>
+  
+    <div id="taskModal"
+         style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.65); z-index:9999;">
+
+      <div style="max-width:900px; margin:6vh auto; background:#12141a; border:1px solid #2a3140; border-radius:14px; overflow:hidden;">
+
+        <!-- HEADER -->
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px; border-bottom:1px solid #2a3140;">
+          <div style="display:flex; flex-direction:column; gap:2px;">
+            <div id="modalTitle" style="font-weight:650; font-size:15px;"></div>
+            <div id="modalMeta" style="font-size:12px; color:#aab4c5;"></div>
+          </div>
+
+          <div style="display:flex; align-items:center; gap:10px;">
+            <a id="modalOpenLink"
+               target="_blank"
+               style="font-size:12px; color:#7db7ff; text-decoration:none;">
+              Open in Vikunja
+            </a>
+
+            <button id="modalCloseBtn"
+                    style="background:#1b202b; border:1px solid #2a3140; color:#e6edf3; padding:6px 10px; border-radius:8px; cursor:pointer;">
+              Close
+            </button>
+          </div>
+        </div>
+
+        <!-- BODY -->
+        <div style="padding:12px;">
+          <div style="display:grid; grid-template-columns: 1fr; gap:12px;">
+
+            <!-- DETAILS -->
+            <div id="modalDetails"
+                 style="border:1px solid #2a3140; border-radius:12px; padding:10px; background:rgba(255,255,255,0.02);">
+              <div style="font-size:12px; color:#aab4c5; margin-bottom:8px;">Details</div>
+              <div id="modalDetailsGrid"
+                   style="display:grid; grid-template-columns:160px 1fr; gap:6px 10px; align-items:center;"></div>
+            </div>
+
+            <!-- DESCRIPTION -->
+            <div>
+              <div style="font-size:12px; color:#aab4c5; margin-bottom:6px;">Description</div>
+              <div id="modalDescription"
+                   style="white-space:normal; line-height:1.45; border:1px solid #2a3140; border-radius:12px; padding:10px; background:rgba(255,255,255,0.02);"></div>
+            </div>
+
+            <!-- COMMENTS -->
+            <div id="modalCommentsWrap"
+                 style="border:1px solid #2a3140; border-radius:12px; padding:10px; background:rgba(255,255,255,0.02);">
+              <div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px;">
+                <div style="font-size:12px; color:#aab4c5;">Comments</div>
+                <div id="modalCommentsStatus" style="font-size:12px; color:#aab4c5;"></div>
+              </div>
+
+              <div id="modalComments"
+                   style="margin-top:8px; display:flex; flex-direction:column; gap:8px;"></div>
+            </div>
+
+            <!-- RAW JSON -->
+            <div id="modalJsonWrap">
+              <div style="font-size:12px; color:#aab4c5; margin-bottom:6px;">Raw (read-only)</div>
+              <pre id="modalJson"
+                   style="max-height:40vh; overflow:auto; background:rgba(255,255,255,0.04); border:1px solid #2a3140; padding:10px; border-radius:12px;"></pre>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+<script src="js/script.js"></script>
+</body>
+</html>
