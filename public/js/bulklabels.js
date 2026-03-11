@@ -130,12 +130,16 @@ async function updateTaskLabels(taskId, labelIds, operation) {
     setStatus(`Updating task ${taskId}...`);
     
     try {
+        console.log(`Operation: ${operation}, Task ID: ${taskId}, Label IDs:`, labelIds);
+        
         // For label operations, we need the full label objects
         let labelsToUpdate = [];
         
         if (operation === 'add') {
             // For adding, we need to get the current task first to know which labels are already applied
             const url = new URL(`/api/tasks/${taskId}`, window.location.origin);
+            console.log(`Fetching task from: ${url.toString()}`);
+            
             const response = await fetch(url.toString());
             
             if (!response.ok) {
@@ -144,9 +148,11 @@ async function updateTaskLabels(taskId, labelIds, operation) {
             }
             
             const task = await response.json();
+            console.log(`Current task:`, task);
             
             // Get current label IDs to avoid duplicates
             const currentLabelIds = new Set((task.labels || []).map(label => label.id));
+            console.log(`Current label IDs:`, Array.from(currentLabelIds));
             
             // Start with existing labels
             labelsToUpdate = [...(task.labels || [])];
@@ -155,12 +161,11 @@ async function updateTaskLabels(taskId, labelIds, operation) {
             for (const labelId of labelIds) {
                 if (!currentLabelIds.has(labelId)) {
                     const label = allLabels.find(l => l.id === labelId);
+                    console.log(`Adding label:`, label);
                     if (label) {
                         // Only include the necessary fields for the label
                         labelsToUpdate.push({
-                            id: label.id,
-                            title: label.title,
-                            hex_color: label.hex_color
+                            id: label.id
                         });
                     }
                 }
@@ -168,6 +173,8 @@ async function updateTaskLabels(taskId, labelIds, operation) {
         } else if (operation === 'remove') {
             // For removing, we need to get the current task first to know which labels to keep
             const url = new URL(`/api/tasks/${taskId}`, window.location.origin);
+            console.log(`Fetching task from: ${url.toString()}`);
+            
             const response = await fetch(url.toString());
             
             if (!response.ok) {
@@ -176,13 +183,18 @@ async function updateTaskLabels(taskId, labelIds, operation) {
             }
             
             const task = await response.json();
+            console.log(`Current task:`, task);
             
             // Keep only labels that are not in the removal list
             labelsToUpdate = (task.labels || []).filter(label => !labelIds.includes(label.id));
+            console.log(`Labels after removal:`, labelsToUpdate);
         }
         
         // Use the regular task update endpoint for labels
         const updateUrl = new URL(`/api/tasks/${taskId}/labels`, window.location.origin);
+        
+        console.log(`Sending ${labelsToUpdate.length} labels to: ${updateUrl.toString()}`);
+        console.log(`Labels to update:`, labelsToUpdate);
         
         setStatus(`Sending ${labelsToUpdate.length} labels to task ${taskId}...`);
         
@@ -196,17 +208,23 @@ async function updateTaskLabels(taskId, labelIds, operation) {
             })
         });
         
+        console.log(`Update response status: ${updateResponse.status}`);
+        
         if (!updateResponse.ok) {
             let errorText = '';
             try {
                 errorText = await updateResponse.text();
+                console.error(`Error text: ${errorText}`);
             } catch (e) {
                 errorText = 'No error details available';
+                console.error(`Error getting error text: ${e}`);
             }
             throw new Error(`Failed to update labels for task ${taskId} (${updateResponse.status}): ${errorText}`);
         }
         
-        return await updateResponse.json();
+        const result = await updateResponse.json();
+        console.log(`Update successful:`, result);
+        return result;
     } catch (error) {
         throw new Error(`Error updating labels for task ${taskId}: ${error.message}`);
     }
