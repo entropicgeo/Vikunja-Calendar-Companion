@@ -89,15 +89,15 @@ async function markAsSubtask(subtaskId, parentTask) {
     try {
         // Create the relation payload according to Vikunja API requirements
         const relationPayload = {
-            other_task_id: parentTask.id,
+            task_id: parentTask.id,
             relation_kind: "subtask",
-            task_id: subtaskId
+            other_task_id: subtaskId
         };
         
         // Call the relations endpoint
         const url = new URL(`/api/tasks/${subtaskId}/relations`, window.location.origin);
-        console.log(`Creating relation at: ${url.toString()}`);
-        console.log(`Relation payload:`, relationPayload);
+        console.debug(`Creating relation at: ${url.toString()}`);
+        console.debug(`Relation payload:`, relationPayload);
         
         const response = await fetch(url.toString(), {
             method: 'PUT',
@@ -107,7 +107,7 @@ async function markAsSubtask(subtaskId, parentTask) {
             body: JSON.stringify(relationPayload)
         });
         
-        console.log(`Relation response status: ${response.status}`);
+        console.debug(`Relation response status: ${response.status}`);
         
         if (!response.ok) {
             let errorText = '';
@@ -122,7 +122,7 @@ async function markAsSubtask(subtaskId, parentTask) {
         }
         
         const result = await response.json();
-        console.log(`Relation created successfully:`, result);
+        console.debug(`Relation created successfully:`, result);
         return result;
     } catch (error) {
         throw new Error(`Error marking task ${subtaskId} as subtask: ${error.message}`);

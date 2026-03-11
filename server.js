@@ -202,7 +202,7 @@ app.put('/api/tasks/:taskId/relations', async (req, res) => {
     
     const url = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/relations`;
     
-    console.log(`Creating task relation for task ${taskId} with payload:`, payload);
+    console.debug(`Creating task relation for task ${taskId} with payload:`, payload);
     
     const response = await fetch(url, {
       method: 'PUT',
@@ -221,7 +221,7 @@ app.put('/api/tasks/:taskId/relations', async (req, res) => {
     }
     
     const data = await response.json();
-    console.log(`Task relation created successfully:`, data);
+    console.debug(`Task relation created successfully:`, data);
     res.json(data);
   } catch (error) {
     console.error(`Error creating relation for task ${req.params.taskId}:`, error);
@@ -242,5 +242,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.debug(`Server running on port ${PORT}`);
 });
