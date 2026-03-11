@@ -162,7 +162,7 @@ app.post('/api/tasks/:taskId/labels', async (req, res) => {
     const token = process.env.API_TOKEN;
     const taskId = req.params.taskId;
     const labels = req.body.labels || [];
-    
+    console.log(labels);
     if (!baseUrl || !token) {
       return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
     }
@@ -189,42 +189,44 @@ app.post('/api/tasks/:taskId/labels', async (req, res) => {
     
     const task = await taskResponse.json();
     console.log(`Current task labels: ${JSON.stringify(task.labels?.map(l => l.id) || [])}`);
-    console.log(`New labels: ${JSON.stringify(labels.map(l => l.id))}`);
+    console.log(labels);
     
-    // Create a copy of the task with only necessary fields
-    const taskUpdate = {
-      id: task.id,
-      title: task.title,
-      description: task.description,
-      done: task.done,
-      due_date: task.due_date,
-      labels: labels
-    };
-    
-    console.log(`Sending update to: ${taskUrl}`);
-    
-    // Send the updated task back to the API
-    const updateResponse = await fetch(taskUrl, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      },
-      body: JSON.stringify(taskUpdate)
-    });
-    
-    console.log(`Update response status: ${updateResponse.status}`);
-    
-    if (!updateResponse.ok) {
-      const text = await updateResponse.text();
-      console.error(`Error updating task: ${text}`);
-      return res.status(updateResponse.status).send(text);
+    let responses = []
+    for (const label of labels) {
+        // Create a copy of the task with only necessary fields
+        //const taskUpdate = {
+      //    created: "",
+       //   label_id: label.id
+        //};
+        const addLabelUrl = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/labels`;
+        console.log(`Sending update to: ${addLabelUrl}`);
+        console.log(label);
+        // Send the updated task back to the API
+        const updateResponse = await fetch(addLabelUrl, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(label)
+        });
+        
+        console.log(`Update response status: ${updateResponse.status}`);
+        
+        if (!updateResponse.ok) {
+          const text = await updateResponse.text();
+          console.error(`Error updating task: ${text}`);
+          return res.status(updateResponse.status).send(text);
+        }
+        
+        const data = await updateResponse.json();
+        //console.log(`Update successful, new label count: ${data.labels?.length || 0}`);
+        responses.push(data);
     }
+    res.json(JSON.stringify(responses));
     
-    const data = await updateResponse.json();
-    console.log(`Update successful, new label count: ${data.labels?.length || 0}`);
-    res.json(data);
+    
   } catch (error) {
     console.error(`Error updating labels for task ${req.params.taskId}:`, error);
     res.status(500).json({ error: error.message });
