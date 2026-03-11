@@ -87,59 +87,42 @@ async function markAsSubtask(subtaskId, parentTask) {
     setStatus(`Marking task ${subtaskId} as subtask of ${parentTask.id}...`);
     
     try {
-        // First, get the current subtask to preserve its data
-        const url = new URL(`/api/tasks/${subtaskId}`, window.location.origin);
-        console.log(`Fetching subtask from: ${url.toString()}`);
-        
-        const response = await fetch(url.toString());
-        
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(`Failed to fetch task ${subtaskId} (${response.status}): ${text}`);
-        }
-        
-        const subtask = await response.json();
-        console.log('Current subtask:', subtask);
-        
-        // Prepare the related_tasks field with the parent task
-        const relatedTasks = subtask.related_tasks || {};
-        relatedTasks.subtask = parentTask;
-        
-        // Update the task with the new related_tasks field
-        const updateUrl = new URL(`/api/tasks/${subtaskId}`, window.location.origin);
-        
-        console.log(`Updating task at: ${updateUrl.toString()}`);
-        console.log(`Related tasks:`, relatedTasks);
-        
-        const updatePayload = {
-            ...subtask,
-            related_tasks: relatedTasks
+        // Create the relation payload according to Vikunja API requirements
+        const relationPayload = {
+            other_task_id: parentTask.id,
+            relation_kind: "subtask",
+            task_id: subtaskId
         };
         
-        const updateResponse = await fetch(updateUrl.toString(), {
+        // Call the relations endpoint
+        const url = new URL(`/api/tasks/${subtaskId}/relations`, window.location.origin);
+        console.log(`Creating relation at: ${url.toString()}`);
+        console.log(`Relation payload:`, relationPayload);
+        
+        const response = await fetch(url.toString(), {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify(updatePayload)
+            body: JSON.stringify(relationPayload)
         });
         
-        console.log(`Update response status: ${updateResponse.status}`);
+        console.log(`Relation response status: ${response.status}`);
         
-        if (!updateResponse.ok) {
+        if (!response.ok) {
             let errorText = '';
             try {
-                errorText = await updateResponse.text();
+                errorText = await response.text();
                 console.error(`Error text: ${errorText}`);
             } catch (e) {
                 errorText = 'No error details available';
                 console.error(`Error getting error text: ${e}`);
             }
-            throw new Error(`Failed to update task ${subtaskId} (${updateResponse.status}): ${errorText}`);
+            throw new Error(`Failed to create relation for task ${subtaskId} (${response.status}): ${errorText}`);
         }
         
-        const result = await updateResponse.json();
-        console.log(`Update successful:`, result);
+        const result = await response.json();
+        console.log(`Relation created successfully:`, result);
         return result;
     } catch (error) {
         throw new Error(`Error marking task ${subtaskId} as subtask: ${error.message}`);
