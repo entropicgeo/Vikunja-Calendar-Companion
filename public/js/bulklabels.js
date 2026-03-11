@@ -1,21 +1,19 @@
 // DOM Elements
 const elements = {
     taskFilter: document.getElementById('task-filter'),
-    labelFilter: document.getElementById('label-filter'),
+    parentFilter: document.getElementById('parent-filter'),
     tasksContainer: document.getElementById('tasks-container'),
-    labelsContainer: document.getElementById('labels-container'),
+    parentContainer: document.getElementById('parent-container'),
     selectAllBtn: document.getElementById('select-all'),
     selectNoneBtn: document.getElementById('select-none'),
-    applyLabelsBtn: document.getElementById('apply-labels'),
-    removeLabelsBtn: document.getElementById('remove-labels'),
+    markSubtasksBtn: document.getElementById('mark-subtasks'),
     statusBar: document.getElementById('status-bar')
 };
 
 // State
 let allTasks = [];
-let allLabels = [];
 let selectedTaskIds = new Set();
-let selectedLabelIds = new Set();
+let selectedParentId = null;
 let serverConfig = {};
 
 // Initialize
@@ -24,10 +22,7 @@ document.addEventListener('DOMContentLoaded', init);
 async function init() {
     try {
         await fetchServerConfig();
-        await Promise.all([
-            loadAllTasks(),
-            loadAllLabels()
-        ]);
+        await loadAllTasks();
         setupEventListeners();
     } catch (error) {
         setStatus(`Error initializing: ${error.message}`, 'error');
@@ -54,21 +49,10 @@ async function loadAllTasks() {
         const tasks = await fetchAllTasks();
         allTasks = tasks.filter(task => !task.done); // Only show non-completed tasks
         renderTasks(allTasks);
+        renderParentTasks(allTasks);
         setStatus(`Loaded ${allTasks.length} tasks`);
     } catch (error) {
         setStatus(`Error loading tasks: ${error.message}`, 'error');
-    }
-}
-
-async function loadAllLabels() {
-    setStatus('Loading labels...');
-    
-    try {
-        allLabels = await fetchAllLabels();
-        renderLabels(allLabels);
-        setStatus(`Loaded ${allLabels.length} labels`);
-    } catch (error) {
-        setStatus(`Error loading labels: ${error.message}`, 'error');
     }
 }
 
@@ -99,105 +83,45 @@ async function fetchAllTasks() {
     return tasks;
 }
 
-async function fetchAllLabels() {
-    const labels = [];
-    const perPage = 250;
-    let page = 1;
-    
-    while (true) {
-        const url = new URL('/api/labels', window.location.origin);
-        url.searchParams.set('page', String(page));
-        url.searchParams.set('per_page', String(perPage));
-        
-        const response = await fetch(url.toString());
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(`Failed to fetch labels (${response.status}): ${text}`);
-        }
-        
-        const data = await response.json();
-        if (!data || !data.length) break;
-        
-        labels.push(...data);
-        if (data.length < perPage) break;
-        page++;
-    }
-    
-    return labels;
-}
-
-async function updateTaskLabels(taskId, labelIds, operation) {
-    setStatus(`Updating task ${taskId}...`);
+async function markAsSubtask(subtaskId, parentTask) {
+    setStatus(`Marking task ${subtaskId} as subtask of ${parentTask.id}...`);
     
     try {
-        console.log(`Operation: ${operation}, Task ID: ${taskId}, Label IDs:`, labelIds);
+        // First, get the current subtask to preserve its data
+        const url = new URL(`/api/tasks/${subtaskId}`, window.location.origin);
+        console.log(`Fetching subtask from: ${url.toString()}`);
         
-        // For label operations, we need the full label objects
-        let labelsToUpdate = [];
+        const response = await fetch(url.toString());
         
-       if (operation === 'add') {
-          // For adding, fetch current task so we know which labels are already applied
-          const url = new URL(`/api/tasks/${taskId}`, window.location.origin);
-          console.log(`Fetching task from: ${url.toString()}`);
-        
-          const response = await fetch(url.toString());
-        
-          if (!response.ok) {
+        if (!response.ok) {
             const text = await response.text();
-            throw new Error(`Failed to fetch task ${taskId} (${response.status}): ${text}`);
-          }
-        
-          const task = await response.json();
-          console.log('Current task:', task);
-        
-          // Old label IDs already on the task
-          const oldLabelIds = (task.labels || []).map(label => label.id);
-        
-          // Combine old + new label IDs, removing duplicates
-          const combinedLabelIds = [...new Set([...oldLabelIds, ...labelIds])];
-          console.log('Old label IDs:', oldLabelIds);
-          console.log('New label IDs:', labelIds);
-          console.log('Combined label IDs:', combinedLabelIds);
-        
-          // Build full label objects from allLabels for all matching IDs
-          labelsToUpdate = allLabels.filter(label => combinedLabelIds.includes(label.id));
-          console.log('Labels to update:', labelsToUpdate);
-        } else if (operation === 'remove') {
-            // For removing, we need to get the current task first to know which labels to keep
-            const url = new URL(`/api/tasks/${taskId}`, window.location.origin);
-            console.log(`Fetching task from: ${url.toString()}`);
-            
-            const response = await fetch(url.toString());
-            
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(`Failed to fetch task ${taskId} (${response.status}): ${text}`);
-            }
-            
-            const task = await response.json();
-            console.log(`Current task:`, task);
-            
-            // Keep only labels that are not in the removal list
-            labelsToUpdate = (task.labels || []).filter(label => !labelIds.includes(label.id));
-            console.log(`Labels after removal:`, labelsToUpdate);
+            throw new Error(`Failed to fetch task ${subtaskId} (${response.status}): ${text}`);
         }
         
-        // Use the regular task update endpoint for labels
-        const updateUrl = new URL(`/api/tasks/${taskId}/labels`, window.location.origin);
+        const subtask = await response.json();
+        console.log('Current subtask:', subtask);
         
-        console.log(`Sending ${labelsToUpdate.length} labels to: ${updateUrl.toString()}`);
-        console.log(`Labels to update:`, labelsToUpdate);
+        // Prepare the related_tasks field with the parent task
+        const relatedTasks = subtask.related_tasks || {};
+        relatedTasks.subtask = parentTask;
         
-        setStatus(`Sending ${labelsToUpdate.length} labels to task ${taskId}...`);
+        // Update the task with the new related_tasks field
+        const updateUrl = new URL(`/api/tasks/${subtaskId}`, window.location.origin);
+        
+        console.log(`Updating task at: ${updateUrl.toString()}`);
+        console.log(`Related tasks:`, relatedTasks);
+        
+        const updatePayload = {
+            ...subtask,
+            related_tasks: relatedTasks
+        };
         
         const updateResponse = await fetch(updateUrl.toString(), {
-            method: 'POST',
+            method: 'PUT',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-                labels: labelsToUpdate
-            })
+            body: JSON.stringify(updatePayload)
         });
         
         console.log(`Update response status: ${updateResponse.status}`);
@@ -211,14 +135,14 @@ async function updateTaskLabels(taskId, labelIds, operation) {
                 errorText = 'No error details available';
                 console.error(`Error getting error text: ${e}`);
             }
-            throw new Error(`Failed to update labels for task ${taskId} (${updateResponse.status}): ${errorText}`);
+            throw new Error(`Failed to update task ${subtaskId} (${updateResponse.status}): ${errorText}`);
         }
         
         const result = await updateResponse.json();
         console.log(`Update successful:`, result);
         return result;
     } catch (error) {
-        throw new Error(`Error updating labels for task ${taskId}: ${error.message}`);
+        throw new Error(`Error marking task ${subtaskId} as subtask: ${error.message}`);
     }
 }
 
@@ -273,61 +197,56 @@ function renderTasks(tasks) {
     }
 }
 
-function renderLabels(labels) {
-    elements.labelsContainer.innerHTML = '';
+function renderParentTasks(tasks) {
+    elements.parentContainer.innerHTML = '';
     
-    if (!labels.length) {
-        elements.labelsContainer.innerHTML = '<div class="loading">No labels found</div>';
+    if (!tasks.length) {
+        elements.parentContainer.innerHTML = '<div class="loading">No tasks found</div>';
         return;
     }
     
-    // Sort labels by title
-    const sortedLabels = [...labels].sort((a, b) => 
+    // Sort tasks by title
+    const sortedTasks = [...tasks].sort((a, b) => 
         (a.title || '').localeCompare(b.title || '')
     );
     
-    for (const label of sortedLabels) {
-        const labelElement = document.createElement('div');
-        labelElement.className = 'label-item';
-        labelElement.dataset.labelId = label.id;
+    for (const task of sortedTasks) {
+        const taskElement = document.createElement('div');
+        taskElement.className = 'parent-task-item';
+        taskElement.dataset.taskId = task.id;
         
-        if (selectedLabelIds.has(label.id)) {
-            labelElement.classList.add('selected');
+        if (selectedParentId === task.id) {
+            taskElement.classList.add('selected');
         }
         
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'label-checkbox';
-        checkbox.checked = selectedLabelIds.has(label.id);
-        
-        const colorSwatch = document.createElement('div');
-        colorSwatch.className = 'label-color';
-        const color = normalizeHexColor(label.hex_color || label.color);
-        if (color) {
-            colorSwatch.style.backgroundColor = color;
-        }
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'parent-task';
+        radio.className = 'parent-task-radio';
+        radio.checked = selectedParentId === task.id;
         
         const title = document.createElement('div');
-        title.className = 'label-title';
-        title.textContent = label.title || `Label #${label.id}`;
+        title.className = 'task-title';
+        title.textContent = task.title || `Task #${task.id}`;
         
-        labelElement.appendChild(checkbox);
-        labelElement.appendChild(colorSwatch);
-        labelElement.appendChild(title);
+        taskElement.appendChild(radio);
+        taskElement.appendChild(title);
         
         // Add event listeners
-        labelElement.addEventListener('click', (e) => {
-            if (e.target !== checkbox) {
-                checkbox.checked = !checkbox.checked;
-                toggleLabelSelection(label.id, checkbox.checked);
+        taskElement.addEventListener('click', (e) => {
+            if (e.target !== radio) {
+                radio.checked = true;
+                selectParentTask(task.id);
             }
         });
         
-        checkbox.addEventListener('change', () => {
-            toggleLabelSelection(label.id, checkbox.checked);
+        radio.addEventListener('change', () => {
+            if (radio.checked) {
+                selectParentTask(task.id);
+            }
         });
         
-        elements.labelsContainer.appendChild(labelElement);
+        elements.parentContainer.appendChild(taskElement);
     }
 }
 
@@ -348,29 +267,24 @@ function toggleTaskSelection(taskId, selected) {
     updateActionButtonsState();
 }
 
-function toggleLabelSelection(labelId, selected) {
-    if (selected) {
-        selectedLabelIds.add(labelId);
-    } else {
-        selectedLabelIds.delete(labelId);
-    }
+function selectParentTask(taskId) {
+    selectedParentId = taskId;
     
-    // Update UI
-    const labelElement = elements.labelsContainer.querySelector(`[data-label-id="${labelId}"]`);
-    if (labelElement) {
-        labelElement.classList.toggle('selected', selected);
-        labelElement.querySelector('.label-checkbox').checked = selected;
-    }
+    // Update UI - deselect all other parent tasks
+    elements.parentContainer.querySelectorAll('.parent-task-item').forEach(el => {
+        const isSelected = el.dataset.taskId == taskId;
+        el.classList.toggle('selected', isSelected);
+        el.querySelector('.parent-task-radio').checked = isSelected;
+    });
     
     updateActionButtonsState();
 }
 
 function updateActionButtonsState() {
     const hasSelectedTasks = selectedTaskIds.size > 0;
-    const hasSelectedLabels = selectedLabelIds.size > 0;
+    const hasSelectedParent = selectedParentId !== null;
     
-    elements.applyLabelsBtn.disabled = !(hasSelectedTasks && hasSelectedLabels);
-    elements.removeLabelsBtn.disabled = !(hasSelectedTasks && hasSelectedLabels);
+    elements.markSubtasksBtn.disabled = !(hasSelectedTasks && hasSelectedParent);
 }
 
 function setStatus(message, type = '') {
@@ -402,19 +316,19 @@ function filterTasks() {
     renderTasks(filtered);
 }
 
-function filterLabels() {
-    const filterText = elements.labelFilter.value.toLowerCase();
+function filterParentTasks() {
+    const filterText = elements.parentFilter.value.toLowerCase();
     
     if (!filterText) {
-        renderLabels(allLabels);
+        renderParentTasks(allTasks);
         return;
     }
     
-    const filtered = allLabels.filter(label => 
-        (label.title || '').toLowerCase().includes(filterText)
+    const filtered = allTasks.filter(task => 
+        (task.title || '').toLowerCase().includes(filterText)
     );
     
-    renderLabels(filtered);
+    renderParentTasks(filtered);
 }
 
 // Event Handlers
@@ -438,82 +352,49 @@ function setupEventListeners() {
     
     // Filters
     elements.taskFilter.addEventListener('input', filterTasks);
-    elements.labelFilter.addEventListener('input', filterLabels);
+    elements.parentFilter.addEventListener('input', filterParentTasks);
     
-    // Action buttons
-    elements.applyLabelsBtn.addEventListener('click', async () => {
-        if (selectedTaskIds.size === 0 || selectedLabelIds.size === 0) {
-            setStatus('Please select both tasks and labels', 'error');
+    // Action button
+    elements.markSubtasksBtn.addEventListener('click', async () => {
+        if (selectedTaskIds.size === 0 || selectedParentId === null) {
+            setStatus('Please select both subtasks and a parent task', 'error');
             return;
         }
         
-        const taskIds = Array.from(selectedTaskIds);
-        const labelIds = Array.from(selectedLabelIds);
+        const subtaskIds = Array.from(selectedTaskIds);
+        const parentTask = allTasks.find(task => task.id === selectedParentId);
         
-        setStatus(`Applying ${labelIds.length} labels to ${taskIds.length} tasks...`);
+        if (!parentTask) {
+            setStatus('Parent task not found', 'error');
+            return;
+        }
+        
+        setStatus(`Marking ${subtaskIds.length} tasks as subtasks of "${parentTask.title}"...`);
         
         try {
             let successCount = 0;
             let errorCount = 0;
             
-            for (const taskId of taskIds) {
+            for (const subtaskId of subtaskIds) {
                 try {
-                    await updateTaskLabels(taskId, labelIds, 'add');
+                    await markAsSubtask(subtaskId, parentTask);
                     successCount++;
                 } catch (error) {
-                    console.error(`Error updating labels for task ${taskId}:`, error);
+                    console.error(`Error marking task ${subtaskId} as subtask:`, error);
                     errorCount++;
                 }
             }
             
             if (errorCount === 0) {
-                setStatus(`Successfully applied labels to ${successCount} tasks`, 'success');
+                setStatus(`Successfully marked ${successCount} tasks as subtasks`, 'success');
             } else {
-                setStatus(`Applied labels to ${successCount} tasks with ${errorCount} errors`, 'error');
+                setStatus(`Marked ${successCount} tasks as subtasks with ${errorCount} errors`, 'error');
             }
             
-            // Refresh task data to show updated labels
+            // Refresh task data to show updated relationships
             await loadAllTasks();
         } catch (error) {
-            setStatus(`Error applying labels: ${error.message}`, 'error');
-        }
-    });
-    
-    elements.removeLabelsBtn.addEventListener('click', async () => {
-        if (selectedTaskIds.size === 0 || selectedLabelIds.size === 0) {
-            setStatus('Please select both tasks and labels', 'error');
-            return;
-        }
-        
-        const taskIds = Array.from(selectedTaskIds);
-        const labelIds = Array.from(selectedLabelIds);
-        
-        setStatus(`Removing ${labelIds.length} labels from ${taskIds.length} tasks...`);
-        
-        try {
-            let successCount = 0;
-            let errorCount = 0;
-            
-            for (const taskId of taskIds) {
-                try {
-                    await updateTaskLabels(taskId, labelIds, 'remove');
-                    successCount++;
-                } catch (error) {
-                    console.error(`Error updating labels for task ${taskId}:`, error);
-                    errorCount++;
-                }
-            }
-            
-            if (errorCount === 0) {
-                setStatus(`Successfully removed labels from ${successCount} tasks`, 'success');
-            } else {
-                setStatus(`Removed labels from ${successCount} tasks with ${errorCount} errors`, 'error');
-            }
-            
-            // Refresh task data to show updated labels
-            await loadAllTasks();
-        } catch (error) {
-            setStatus(`Error removing labels: ${error.message}`, 'error');
+            setStatus(`Error marking subtasks: ${error.message}`, 'error');
         }
     });
     

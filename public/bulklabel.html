@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bulk Label Manager</title>
+    <title>Subtask Manager</title>
     <link rel="stylesheet" href="styles/bulklabels.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Bulk Label Manager</h1>
+            <h1>Subtask Manager</h1>
             <a href="/" class="back-link">Back to Calendar</a>
         </header>
 
         <div class="main-content">
             <div class="panel tasks-panel">
-                <h2>Tasks</h2>
+                <h2>Subtasks (Select Multiple)</h2>
                 <div class="filter-controls">
                     <input type="text" id="task-filter" placeholder="Filter tasks...">
                     <div class="selection-controls">
@@ -28,17 +28,16 @@
                 </div>
             </div>
 
-            <div class="panel labels-panel">
-                <h2>Labels</h2>
+            <div class="panel parent-tasks-panel">
+                <h2>Parent Task (Select One)</h2>
                 <div class="filter-controls">
-                    <input type="text" id="label-filter" placeholder="Filter labels...">
+                    <input type="text" id="parent-filter" placeholder="Filter tasks...">
                 </div>
-                <div id="labels-container" class="list-container">
-                    <div class="loading">Loading labels...</div>
+                <div id="parent-container" class="list-container">
+                    <div class="loading">Loading tasks...</div>
                 </div>
                 <div class="action-buttons">
-                    <button id="apply-labels" class="primary-button">Apply Selected Labels</button>
-                    <button id="remove-labels" class="danger-button">Remove Selected Labels</button>
+                    <button id="mark-subtasks" class="primary-button">Mark as Subtasks</button>
                 </div>
             </div>
         </div>
