@@ -36,53 +36,8 @@ app.get('/api/labels', async (req, res) => {
     });
     
     if (!response.ok) {
-      console.log('Bulk update failed with status:', response.status);
-      
-      // If the bulk endpoint fails with 401, try the regular task update endpoint as fallback
-      if (response.status === 401) {
-        console.log('Attempting fallback to regular task update endpoint');
-        
-        // First get the current task
-        const taskUrl = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`;
-        const taskResponse = await fetch(taskUrl, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          }
-        });
-        
-        if (!taskResponse.ok) {
-          const text = await taskResponse.text();
-          return res.status(taskResponse.status).send(text);
-        }
-        
-        const task = await taskResponse.json();
-        
-        // Update the task with the new labels
-        task.labels = payload.labels;
-        
-        const updateResponse = await fetch(taskUrl, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          body: JSON.stringify(task)
-        });
-        
-        if (!updateResponse.ok) {
-          const text = await updateResponse.text();
-          return res.status(updateResponse.status).send(text);
-        }
-        
-        const data = await updateResponse.json();
-        return res.json(data);
-      } else {
-        const text = await response.text();
-        return res.status(response.status).send(text);
-      }
+      const text = await response.text();
+      return res.status(response.status).send(text);
     }
     
     const data = await response.json();
@@ -219,7 +174,7 @@ app.post('/api/tasks/:taskId/labels/bulk', async (req, res) => {
     
     const url = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/labels/bulk`;
     const response = await fetch(url, {
-      method: 'PUT', // Try PUT instead of POST as some APIs require specific methods
+      method: 'POST', // Use POST for the bulk labels endpoint
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
