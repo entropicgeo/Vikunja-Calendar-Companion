@@ -36,8 +36,53 @@ app.get('/api/labels', async (req, res) => {
     });
     
     if (!response.ok) {
-      const text = await response.text();
-      return res.status(response.status).send(text);
+      console.log('Bulk update failed with status:', response.status);
+      
+      // If the bulk endpoint fails with 401, try the regular task update endpoint as fallback
+      if (response.status === 401) {
+        console.log('Attempting fallback to regular task update endpoint');
+        
+        // First get the current task
+        const taskUrl = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`;
+        const taskResponse = await fetch(taskUrl, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          }
+        });
+        
+        if (!taskResponse.ok) {
+          const text = await taskResponse.text();
+          return res.status(taskResponse.status).send(text);
+        }
+        
+        const task = await taskResponse.json();
+        
+        // Update the task with the new labels
+        task.labels = payload.labels;
+        
+        const updateResponse = await fetch(taskUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify(task)
+        });
+        
+        if (!updateResponse.ok) {
+          const text = await updateResponse.text();
+          return res.status(updateResponse.status).send(text);
+        }
+        
+        const data = await updateResponse.json();
+        return res.json(data);
+      } else {
+        const text = await response.text();
+        return res.status(response.status).send(text);
+      }
     }
     
     const data = await response.json();
@@ -162,14 +207,19 @@ app.post('/api/tasks/:taskId/labels/bulk', async (req, res) => {
     const token = process.env.API_TOKEN;
     const taskId = req.params.taskId;
     const payload = req.body;
-    console.log(payload);
+    
     if (!baseUrl || !token) {
       return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
     }
     
+    console.log('Bulk update labels request:');
+    console.log('- URL:', `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/labels/bulk`);
+    console.log('- Token available:', !!token);
+    console.log('- Payload:', JSON.stringify(payload));
+    
     const url = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/labels/bulk`;
     const response = await fetch(url, {
-      method: 'POST',
+      method: 'PUT', // Try PUT instead of POST as some APIs require specific methods
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
@@ -177,7 +227,8 @@ app.post('/api/tasks/:taskId/labels/bulk', async (req, res) => {
       },
       body: JSON.stringify(payload)
     });
-    console.log(url, payload, response);
+    
+    console.log('Response status:', response.status);
     if (!response.ok) {
       const text = await response.text();
       return res.status(response.status).send(text);
