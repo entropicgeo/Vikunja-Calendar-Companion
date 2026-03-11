@@ -16,6 +16,16 @@
 <body>
   <header>
     <h1>Vikunja ↔ Calendar (drag/drop schedules)</h1>
+    <div class="tools-menu">
+      <button id="toolsMenuBtn" class="tools-menu-btn" aria-label="Tools menu">
+        <span class="hamburger-icon">☰</span>
+      </button>
+      <div class="tools-dropdown">
+        <div class="tools-dropdown-header">Other tools</div>
+        <a href="bulksubtask.html" class="tools-link">Bulk Subtask Assignment</a>
+        <!-- Add more tool links here as needed -->
+      </div>
+    </div>
   </header>
 
   <div class="app">
@@ -183,5 +193,28 @@
       </div>
     </div>
 <script src="js/script.js"></script>
+<script>
+  // Tools menu functionality
+  document.addEventListener('DOMContentLoaded', function() {
+    const toolsMenuBtn = document.getElementById('toolsMenuBtn');
+    const toolsDropdown = document.querySelector('.tools-dropdown');
+    
+    // Toggle dropdown when clicking the button
+    toolsMenuBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      toolsDropdown.classList.toggle('active');
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function() {
+      toolsDropdown.classList.remove('active');
+    });
+    
+    // Prevent dropdown from closing when clicking inside it
+    toolsDropdown.addEventListener('click', function(e) {
+      e.stopPropagation();
+    });
+  });
+</script>
 </body>
 </html>
