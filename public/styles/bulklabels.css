@@ -128,20 +128,35 @@ button:hover {
     background-color: #fff;
 }
 
+.parent-task-item {
+    padding: 10px 15px;
+    border-bottom: 1px solid #e1e4e8;
+    display: flex;
+    align-items: center;
+    background-color: #fff;
+}
+
 .task-item:last-child, .label-item:last-child {
     border-bottom: none;
 }
 
-.task-item.selected, .label-item.selected {
+.task-item.selected, .label-item.selected, .parent-task-item.selected {
     background-color: #ebf5fb;
 }
 
-.task-item:hover, .label-item:hover {
+.task-item:hover, .label-item:hover, .parent-task-item:hover {
     background-color: #f1f8fe;
 }
 
 .task-checkbox, .label-checkbox {
     margin-right: 10px;
+}
+
+.parent-task-radio {
+    margin-right: 10px;
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
 }
 
 .label-color {
