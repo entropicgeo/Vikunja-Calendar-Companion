@@ -10,11 +10,18 @@ body {
     line-height: 1.6;
     color: #333;
     background-color: #f5f7fa;
+    display: flex;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100vh;
 }
 
 .container {
+    width: 100%;
     max-width: 1200px;
-    margin: 0 auto;
+    margin: 0;
     padding: 20px;
 }
 
@@ -42,8 +49,9 @@ h1 {
 
 .main-content {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 20px;
+    width: 100%;
 }
 
 .panel {
@@ -117,7 +125,9 @@ button:hover {
     border-radius: 4px;
     max-height: 500px;
     overflow-y: auto;
+    overflow-x: hidden;
     background-color: #f8f9fa;
+    width: 100%;
 }
 
 .task-item, .label-item {
@@ -126,6 +136,8 @@ button:hover {
     display: flex;
     align-items: center;
     background-color: #fff;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .parent-task-item {
@@ -134,6 +146,8 @@ button:hover {
     display: flex;
     align-items: center;
     background-color: #fff;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .task-item:last-child, .label-item:last-child {
@@ -169,6 +183,8 @@ button:hover {
 
 .task-title, .label-title {
     flex-grow: 1;
+    flex-shrink: 1;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
