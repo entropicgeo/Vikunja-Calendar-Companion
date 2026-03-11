@@ -167,10 +167,12 @@ app.post('/api/tasks/:taskId/labels', async (req, res) => {
       return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
     }
     
-    console.log(`Updating labels for task ${taskId}`);
+    console.log(`Updating labels for task ${taskId}, label count: ${labels.length}`);
     
     // First get the current task
     const taskUrl = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`;
+    console.log(`Fetching task from: ${taskUrl}`);
+    
     const taskResponse = await fetch(taskUrl, {
       headers: {
         'Authorization': `Bearer ${token}`,
@@ -181,13 +183,25 @@ app.post('/api/tasks/:taskId/labels', async (req, res) => {
     
     if (!taskResponse.ok) {
       const text = await taskResponse.text();
+      console.error(`Error fetching task: ${text}`);
       return res.status(taskResponse.status).send(text);
     }
     
     const task = await taskResponse.json();
+    console.log(`Current task labels: ${JSON.stringify(task.labels?.map(l => l.id) || [])}`);
+    console.log(`New labels: ${JSON.stringify(labels.map(l => l.id))}`);
     
-    // Update the task with the new labels
-    task.labels = labels;
+    // Create a copy of the task with only necessary fields
+    const taskUpdate = {
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      done: task.done,
+      due_date: task.due_date,
+      labels: labels
+    };
+    
+    console.log(`Sending update to: ${taskUrl}`);
     
     // Send the updated task back to the API
     const updateResponse = await fetch(taskUrl, {
@@ -197,15 +211,19 @@ app.post('/api/tasks/:taskId/labels', async (req, res) => {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify(task)
+      body: JSON.stringify(taskUpdate)
     });
+    
+    console.log(`Update response status: ${updateResponse.status}`);
     
     if (!updateResponse.ok) {
       const text = await updateResponse.text();
+      console.error(`Error updating task: ${text}`);
       return res.status(updateResponse.status).send(text);
     }
     
     const data = await updateResponse.json();
+    console.log(`Update successful, new label count: ${data.labels?.length || 0}`);
     res.json(data);
   } catch (error) {
     console.error(`Error updating labels for task ${req.params.taskId}:`, error);
