@@ -155,41 +155,57 @@ app.post('/api/tasks/:taskId', async (req, res) => {
   }
 });
 
-// Bulk update labels for a task
-app.post('/api/tasks/:taskId/labels/bulk', async (req, res) => {
+// Update labels for a task (using the regular task update endpoint)
+app.post('/api/tasks/:taskId/labels', async (req, res) => {
   try {
     const baseUrl = process.env.API_BASE_URL;
     const token = process.env.API_TOKEN;
     const taskId = req.params.taskId;
-    const payload = req.body;
+    const labels = req.body.labels || [];
     
     if (!baseUrl || !token) {
       return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
     }
     
-    console.log('Bulk update labels request:');
-    console.log('- URL:', `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/labels/bulk`);
-    console.log('- Token available:', !!token);
-    console.log('- Payload:', JSON.stringify(payload));
+    console.log(`Updating labels for task ${taskId}`);
     
-    const url = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/labels/bulk`;
-    const response = await fetch(url, {
-      method: 'POST', // Use POST for the bulk labels endpoint
+    // First get the current task
+    const taskUrl = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`;
+    const taskResponse = await fetch(taskUrl, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!taskResponse.ok) {
+      const text = await taskResponse.text();
+      return res.status(taskResponse.status).send(text);
+    }
+    
+    const task = await taskResponse.json();
+    
+    // Update the task with the new labels
+    task.labels = labels;
+    
+    // Send the updated task back to the API
+    const updateResponse = await fetch(taskUrl, {
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(task)
     });
     
-    console.log('Response status:', response.status);
-    if (!response.ok) {
-      const text = await response.text();
-      return res.status(response.status).send(text);
+    if (!updateResponse.ok) {
+      const text = await updateResponse.text();
+      return res.status(updateResponse.status).send(text);
     }
     
-    const data = await response.json();
+    const data = await updateResponse.json();
     res.json(data);
   } catch (error) {
     console.error(`Error updating labels for task ${req.params.taskId}:`, error);
