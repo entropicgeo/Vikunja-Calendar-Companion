@@ -135,39 +135,33 @@ async function updateTaskLabels(taskId, labelIds, operation) {
         // For label operations, we need the full label objects
         let labelsToUpdate = [];
         
-        if (operation === 'add') {
-            // For adding, we need to get the current task first to know which labels are already applied
-            const url = new URL(`/api/tasks/${taskId}`, window.location.origin);
-            console.log(`Fetching task from: ${url.toString()}`);
-            
-            const response = await fetch(url.toString());
-            
-            if (!response.ok) {
-                const text = await response.text();
-                throw new Error(`Failed to fetch task ${taskId} (${response.status}): ${text}`);
-            }
-            
-            const task = await response.json();
-            console.log(`Current task:`, task);
-            
-            // Get current label IDs to avoid duplicates
-            const currentLabelIds = new Set((task.labels || []).map(label => label.id));
-            console.log(`Current label IDs:`, Array.from(currentLabelIds));
-            
-            // Add new labels that aren't already on the task
-            for (const labelId of labelIds) {
-                if (!currentLabelIds.has(labelId)) {
-                    const label = allLabels.find(l => l.id === labelId);
-                    console.log(`Adding label:`, label);
-                    if (label) {
-                        // Only include the necessary fields for the label
-                        labelsToUpdate.push({
-                            id: label.id,
-                            created: label.created
-                        });
-                    }
-                }
-            }
+       if (operation === 'add') {
+          // For adding, fetch current task so we know which labels are already applied
+          const url = new URL(`/api/tasks/${taskId}`, window.location.origin);
+          console.log(`Fetching task from: ${url.toString()}`);
+        
+          const response = await fetch(url.toString());
+        
+          if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`Failed to fetch task ${taskId} (${response.status}): ${text}`);
+          }
+        
+          const task = await response.json();
+          console.log('Current task:', task);
+        
+          // Old label IDs already on the task
+          const oldLabelIds = (task.labels || []).map(label => label.id);
+        
+          // Combine old + new label IDs, removing duplicates
+          const combinedLabelIds = [...new Set([...oldLabelIds, ...labelIds])];
+          console.log('Old label IDs:', oldLabelIds);
+          console.log('New label IDs:', labelIds);
+          console.log('Combined label IDs:', combinedLabelIds);
+        
+          // Build full label objects from allLabels for all matching IDs
+          labelsToUpdate = allLabels.filter(label => combinedLabelIds.includes(label.id));
+          console.log('Labels to update:', labelsToUpdate);
         } else if (operation === 'remove') {
             // For removing, we need to get the current task first to know which labels to keep
             const url = new URL(`/api/tasks/${taskId}`, window.location.origin);

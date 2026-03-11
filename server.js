@@ -192,24 +192,24 @@ app.post('/api/tasks/:taskId/labels', async (req, res) => {
     console.log(labels);
     
     let responses = []
-    for (const label of labels) {
+    //for (const label of labels) {
         // Create a copy of the task with only necessary fields
         //const taskUpdate = {
       //    created: "",
        //   label_id: label.id
         //};
-        const addLabelUrl = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/labels`;
+        const addLabelUrl = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/labels/bulk`;
         console.log(`Sending update to: ${addLabelUrl}`);
-        console.log(label);
+        console.log(labels);
         // Send the updated task back to the API
         const updateResponse = await fetch(addLabelUrl, {
-          method: 'PUT',
+          method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
             'Accept': 'application/json'
           },
-          body: JSON.stringify(label)
+          body: JSON.stringify({labels: labels})
         });
         
         console.log(`Update response status: ${updateResponse.status}`);
@@ -223,8 +223,8 @@ app.post('/api/tasks/:taskId/labels', async (req, res) => {
         const data = await updateResponse.json();
         //console.log(`Update successful, new label count: ${data.labels?.length || 0}`);
         responses.push(data);
-    }
-    res.json(JSON.stringify(responses));
+   // }
+    res.json(JSON.stringify(data));
     
     
   } catch (error) {
