@@ -2,6 +2,8 @@
 const elements = {
     taskFilter: document.getElementById('task-filter'),
     parentFilter: document.getElementById('parent-filter'),
+    projectFilter: document.getElementById('project-filter'),
+    parentProjectFilter: document.getElementById('parent-project-filter'),
     tasksContainer: document.getElementById('tasks-container'),
     parentContainer: document.getElementById('parent-container'),
     selectAllBtn: document.getElementById('select-all'),
@@ -286,30 +288,42 @@ function normalizeHexColor(color) {
 
 function filterTasks() {
     const filterText = elements.taskFilter.value.toLowerCase();
+    const projectId = elements.projectFilter.value ? parseInt(elements.projectFilter.value, 10) : null;
     
-    if (!filterText) {
-        renderTasks(allTasks);
-        return;
+    let filtered = [...allTasks];
+    
+    // Filter by text
+    if (filterText) {
+        filtered = filtered.filter(task => 
+            (task.title || '').toLowerCase().includes(filterText)
+        );
     }
     
-    const filtered = allTasks.filter(task => 
-        (task.title || '').toLowerCase().includes(filterText)
-    );
+    // Filter by project ID
+    if (projectId) {
+        filtered = filtered.filter(task => task.project_id === projectId);
+    }
     
     renderTasks(filtered);
 }
 
 function filterParentTasks() {
     const filterText = elements.parentFilter.value.toLowerCase();
+    const projectId = elements.parentProjectFilter.value ? parseInt(elements.parentProjectFilter.value, 10) : null;
     
-    if (!filterText) {
-        renderParentTasks(allTasks);
-        return;
+    let filtered = [...allTasks];
+    
+    // Filter by text
+    if (filterText) {
+        filtered = filtered.filter(task => 
+            (task.title || '').toLowerCase().includes(filterText)
+        );
     }
     
-    const filtered = allTasks.filter(task => 
-        (task.title || '').toLowerCase().includes(filterText)
-    );
+    // Filter by project ID
+    if (projectId) {
+        filtered = filtered.filter(task => task.project_id === projectId);
+    }
     
     renderParentTasks(filtered);
 }
@@ -336,6 +350,8 @@ function setupEventListeners() {
     // Filters
     elements.taskFilter.addEventListener('input', filterTasks);
     elements.parentFilter.addEventListener('input', filterParentTasks);
+    elements.projectFilter.addEventListener('input', filterTasks);
+    elements.parentProjectFilter.addEventListener('input', filterParentTasks);
     
     // Action button
     elements.markSubtasksBtn.addEventListener('click', async () => {
