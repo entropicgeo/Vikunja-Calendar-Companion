@@ -154,9 +154,6 @@ async function updateTaskLabels(taskId, labelIds, operation) {
             const currentLabelIds = new Set((task.labels || []).map(label => label.id));
             console.log(`Current label IDs:`, Array.from(currentLabelIds));
             
-            // Start with existing labels
-            labelsToUpdate = [...(task.labels || [])];
-            
             // Add new labels that aren't already on the task
             for (const labelId of labelIds) {
                 if (!currentLabelIds.has(labelId)) {
@@ -165,7 +162,8 @@ async function updateTaskLabels(taskId, labelIds, operation) {
                     if (label) {
                         // Only include the necessary fields for the label
                         labelsToUpdate.push({
-                            id: label.id
+                            id: label.id,
+                            created: label.created
                         });
                     }
                 }
