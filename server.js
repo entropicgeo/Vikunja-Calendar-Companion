@@ -266,6 +266,47 @@ app.get('/api/tasks/:taskId/comments', async (req, res) => {
   }
 });
 
+// Add task relation endpoint
+app.put('/api/tasks/:taskId/relations', async (req, res) => {
+  try {
+    const baseUrl = process.env.API_BASE_URL;
+    const token = process.env.API_TOKEN;
+    const taskId = req.params.taskId;
+    const payload = req.body;
+    
+    if (!baseUrl || !token) {
+      return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
+    }
+    
+    const url = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/relations`;
+    
+    console.log(`Creating task relation for task ${taskId} with payload:`, payload);
+    
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`Error creating task relation: ${text}`);
+      return res.status(response.status).send(text);
+    }
+    
+    const data = await response.json();
+    console.log(`Task relation created successfully:`, data);
+    res.json(data);
+  } catch (error) {
+    console.error(`Error creating relation for task ${req.params.taskId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Add an endpoint to get the base URL for the frontend
 app.get('/api/config', (req, res) => {
   res.json({
