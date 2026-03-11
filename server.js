@@ -6,7 +6,6 @@ const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -54,9 +53,8 @@ app.get('/api/tasks', async (req, res) => {
     const baseUrl = process.env.API_BASE_URL;
     const token = process.env.API_TOKEN;
     const page = req.query.page || 1;
-    const perPage = req.query.per_page || 250;
+    const perPage = req.query.per_page || 50;
     const filter = req.query.filter || 'done=false';
-    
     if (!baseUrl || !token) {
       return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
     }
@@ -64,7 +62,8 @@ app.get('/api/tasks', async (req, res) => {
     const url = new URL(`${baseUrl}/api/v1/tasks`);
     url.searchParams.set('page', String(page));
     url.searchParams.set('per_page', String(perPage));
-    url.searchParams.set('filter', filter);
+    // bulklabels page sending 'NONE'
+    if (filter !== 'NONE') url.searchParams.set('filter', filter);
     
     const response = await fetch(url.toString(), {
       headers: {
@@ -185,6 +184,47 @@ app.get('/api/tasks/:taskId/comments', async (req, res) => {
     res.json(data);
   } catch (error) {
     console.error(`Error fetching comments for task ${req.params.taskId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Add task relation endpoint
+app.put('/api/tasks/:taskId/relations', async (req, res) => {
+  try {
+    const baseUrl = process.env.API_BASE_URL;
+    const token = process.env.API_TOKEN;
+    const taskId = req.params.taskId;
+    const payload = req.body;
+    
+    if (!baseUrl || !token) {
+      return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
+    }
+    
+    const url = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}/relations`;
+    
+    console.debug(`Creating task relation for task ${taskId} with payload:`, payload);
+    
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      console.error(`Error creating task relation: ${text}`);
+      return res.status(response.status).send(text);
+    }
+    
+    const data = await response.json();
+    console.debug(`Task relation created successfully:`, data);
+    res.json(data);
+  } catch (error) {
+    console.error(`Error creating relation for task ${req.params.taskId}:`, error);
     res.status(500).json({ error: error.message });
   }
 });

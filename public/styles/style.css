@@ -19,12 +19,84 @@ header {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
   background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0));
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 header h1 {
   margin: 0;
   font-size: 16px;
   letter-spacing: .2px;
   font-weight: 650;
+}
+
+/* Tools menu styles */
+.tools-menu {
+  position: relative;
+}
+
+.tools-menu-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+
+.tools-menu-btn:hover {
+  background: rgba(255,255,255,0.06);
+}
+
+.hamburger-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.tools-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  min-width: 220px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  z-index: 100;
+  overflow: hidden;
+  display: none;
+}
+
+.tools-dropdown.active {
+  display: block;
+}
+
+.tools-dropdown-header {
+  padding: 10px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel2);
+}
+
+.tools-link {
+  display: block;
+  padding: 10px 12px;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 14px;
+  transition: background 0.15s ease;
+}
+
+.tools-link:hover {
+  background: rgba(255,255,255,0.06);
 }
 
 .app {

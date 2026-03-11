@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Subtask Manager</title>
+    <link rel="stylesheet" href="styles/bulksubtask.css">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow-x: hidden;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Subtask Manager</h1>
+            <a href="/" class="back-link">Back to Calendar</a>
+        </header>
+
+        <div class="main-content">
+            <div class="panel tasks-panel">
+                <h2>Subtasks (Select Multiple)</h2>
+                <div class="filter-controls">
+                    <input type="text" id="task-filter" placeholder="Filter tasks...">
+                    <input type="number" id="project-filter" placeholder="Project ID" min="1">
+                    <div class="selection-controls">
+                        <button id="select-all">Select All</button>
+                        <button id="select-none">Clear Selection</button>
+                    </div>
+                </div>
+                <div id="tasks-container" class="list-container">
+                    <div class="loading">Loading tasks...</div>
+                </div>
+            </div>
+
+            <div class="panel parent-tasks-panel">
+                <h2>Parent Task (Select One)</h2>
+                <div class="filter-controls">
+                    <input type="text" id="parent-filter" placeholder="Filter tasks...">
+                    <input type="number" id="parent-project-filter" placeholder="Project ID" min="1">
+                </div>
+                <div id="parent-container" class="list-container">
+                    <div class="loading">Loading tasks...</div>
+                </div>
+                <div class="selection-hint" style="margin-top: 10px; font-size: 0.9em; color: #666;">
+                    Click on a task to select it as the parent
+                </div>
+                <div class="action-buttons">
+                    <button id="mark-subtasks" class="primary-button">Mark as Subtasks</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="status-bar" class="status-bar"></div>
+    </div>
+
+    <script src="js/bulksubtask.js"></script>
+</body>
+</html>
