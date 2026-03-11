@@ -147,17 +147,21 @@ async function updateTaskLabels(taskId, labelIds, operation) {
             
             // Get current label IDs to avoid duplicates
             const currentLabelIds = new Set((task.labels || []).map(label => label.id));
-            console.log("Current", currentLabelIds);
+            
             // Start with existing labels
             labelsToUpdate = [...(task.labels || [])];
-            console.log(labelsToUpdate);
+            
             // Add new labels that aren't already on the task
-            console.log(labelIds);
             for (const labelId of labelIds) {
                 if (!currentLabelIds.has(labelId)) {
                     const label = allLabels.find(l => l.id === labelId);
                     if (label) {
-                        labelsToUpdate.push(label);
+                        // Only include the necessary fields for the label
+                        labelsToUpdate.push({
+                            id: label.id,
+                            title: label.title,
+                            hex_color: label.hex_color
+                        });
                     }
                 }
             }
@@ -179,6 +183,9 @@ async function updateTaskLabels(taskId, labelIds, operation) {
         
         // Use the bulk labels endpoint
         const updateUrl = new URL(`/api/tasks/${taskId}/labels/bulk`, window.location.origin);
+        
+        setStatus(`Sending ${labelsToUpdate.length} labels to task ${taskId}...`);
+        
         const updateResponse = await fetch(updateUrl.toString(), {
             method: 'POST',
             headers: {
@@ -188,10 +195,15 @@ async function updateTaskLabels(taskId, labelIds, operation) {
                 labels: labelsToUpdate
             })
         });
-        console.log(updateUrl.toString(), labelsToUpdate, updateResponse);
+        
         if (!updateResponse.ok) {
-            const text = await updateResponse.text();
-            throw new Error(`Failed to update labels for task ${taskId} (${updateResponse.status}): ${text}`);
+            let errorText = '';
+            try {
+                errorText = await updateResponse.text();
+            } catch (e) {
+                errorText = 'No error details available';
+            }
+            throw new Error(`Failed to update labels for task ${taskId} (${updateResponse.status}): ${errorText}`);
         }
         
         return await updateResponse.json();
