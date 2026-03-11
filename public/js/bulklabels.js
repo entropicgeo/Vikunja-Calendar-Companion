@@ -130,7 +130,7 @@ async function updateTaskLabels(taskId, labelIds, operation) {
     setStatus(`Updating task ${taskId}...`);
     
     try {
-        // For bulk label operations, we need the full label objects
+        // For label operations, we need the full label objects
         let labelsToUpdate = [];
         
         if (operation === 'add') {
@@ -181,8 +181,8 @@ async function updateTaskLabels(taskId, labelIds, operation) {
             labelsToUpdate = (task.labels || []).filter(label => !labelIds.includes(label.id));
         }
         
-        // Use the bulk labels endpoint
-        const updateUrl = new URL(`/api/tasks/${taskId}/labels/bulk`, window.location.origin);
+        // Use the regular task update endpoint for labels
+        const updateUrl = new URL(`/api/tasks/${taskId}/labels`, window.location.origin);
         
         setStatus(`Sending ${labelsToUpdate.length} labels to task ${taskId}...`);
         
