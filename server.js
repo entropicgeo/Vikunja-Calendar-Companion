@@ -242,5 +242,5 @@ app.get('*', (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.debug(`Server running on port ${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
