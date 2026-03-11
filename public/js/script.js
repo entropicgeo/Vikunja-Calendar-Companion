@@ -21,6 +21,8 @@ const els = {
   labelsSelectNoneBtn: document.getElementById('labelsSelectNoneBtn'),
   loadLabelsBtn: document.getElementById('loadLabelsBtn'),
   clearBrowserBtn: document.getElementById('clearBrowserBtn'),
+  showRecurring: document.getElementById('showRecurring'),
+  projectionWeeks: document.getElementById('projectionWeeks'),
 };
 els.labelsPicker.innerHTML = '<div class="small">Press “Load labels” to populate.</div>';
 
@@ -34,6 +36,8 @@ function saveConfigToStorage() {
   const payload = {
     dateField: cfg.dateField,
     labelSelectionById: labelSelectionById,
+    showRecurring: cfg.showRecurring,
+    projectionWeeks: cfg.projectionWeeks,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
@@ -50,6 +54,15 @@ function loadConfigFromStorage() {
     }
 
     if (payload.dateField) els.dateField.value = payload.dateField;
+    
+    // Load recurring event settings
+    if (payload.showRecurring !== undefined) {
+      els.showRecurring.checked = payload.showRecurring;
+    }
+    
+    if (payload.projectionWeeks) {
+      els.projectionWeeks.value = payload.projectionWeeks;
+    }
 
     return true;
   } catch {
@@ -91,6 +104,8 @@ async function fetchServerConfig() {
 
 function config() {
   const dateField = els.dateField.value;
+  const showRecurring = els.showRecurring.checked;
+  const projectionWeeks = parseInt(els.projectionWeeks.value, 10) || 4;
 
   const labelSelectionCopy = { ...(labelSelectionById || {}) };
   const selectedLabelIds = new Set(
@@ -99,14 +114,23 @@ function config() {
       .map(([k]) => String(k))
   );
 
-  return { dateField, labelSelectionById: labelSelectionCopy, selectedLabelIds };
+  return { 
+    dateField, 
+    labelSelectionById: labelSelectionCopy, 
+    selectedLabelIds,
+    showRecurring,
+    projectionWeeks
+  };
 }
 
 function configHash(cfg) {
   // minimal hash to detect config drift
   return JSON.stringify({ 
     d: cfg.dateField, 
-    l: cfg.labelSelectionById });
+    l: cfg.labelSelectionById,
+    r: cfg.showRecurring,
+    p: cfg.projectionWeeks
+  });
 }
 
 // No longer needed as headers are handled by the server
@@ -497,6 +521,34 @@ function ensureCalendar() {
     eventStartEditable: true,
     eventDurationEditable: false,
     eventResizableFromStart: false,
+    
+    // Custom event rendering for recurring projections
+    eventDidMount: (arg) => {
+      // Make label colors visible (background + border)
+      const c = arg.event.backgroundColor || arg.event.borderColor;
+      if (c) {
+        arg.el.style.backgroundColor = c;
+        arg.el.style.borderColor = c;
+      }
+      arg.el.style.borderRadius = '10px';
+      arg.el.style.borderWidth = '1px';
+      
+      // Special styling for recurring projections
+      if (arg.event.extendedProps?.isProjection) {
+        // Add dashed border
+        arg.el.style.borderStyle = 'dashed';
+        
+        // Add a small recurring icon
+        const titleEl = arg.el.querySelector('.fc-event-title');
+        if (titleEl) {
+          const iconSpan = document.createElement('span');
+          iconSpan.innerHTML = ' ↻';
+          iconSpan.style.fontSize = '0.85em';
+          iconSpan.title = 'Recurring event projection';
+          titleEl.appendChild(iconSpan);
+        }
+      }
+    },
 
     drop: async (info) => {
       // external drop from unscheduled list into calendar
@@ -583,16 +635,6 @@ function ensureCalendar() {
       }
     },
 
-    eventDidMount: (arg) => {
-      // Make label colors visible (background + border)
-      const c = arg.event.backgroundColor || arg.event.borderColor;
-      if (c) {
-        arg.el.style.backgroundColor = c;
-        arg.el.style.borderColor = c;
-      }
-      arg.el.style.borderRadius = '10px';
-      arg.el.style.borderWidth = '1px';
-    },
     
     eventReceive: (info) => {
       // Remove the auto-created event immediately; we render from our cache instead.
@@ -606,6 +648,60 @@ function ensureCalendar() {
   });
 
   calendar.render();
+}
+
+// Generate recurring event projections for a given task
+function generateRecurringProjections(task, baseDate, cfg) {
+  const projections = [];
+  
+  // Only process tasks with repeat_after > 0
+  if (!task.repeat_after || task.repeat_after <= 0) {
+    return projections;
+  }
+  
+  // If recurring events are disabled, return empty array
+  if (!cfg.showRecurring) {
+    return projections;
+  }
+  
+  const color = pickEventColor(task);
+  const secondsInDay = 86400; // 24 * 60 * 60
+  
+  // Calculate end date based on projection weeks setting
+  const today = new Date();
+  const projectionEndDate = new Date(today);
+  projectionEndDate.setDate(today.getDate() + (cfg.projectionWeeks * 7));
+  
+  // Start with the base date
+  let currentDate = new Date(baseDate);
+  
+  // Generate up to 50 projections (safety limit)
+  for (let i = 0; i < 50; i++) {
+    // Add repeat_after seconds to the current date
+    const nextDate = new Date(currentDate.getTime() + (task.repeat_after * 1000));
+    
+    // Stop if we've gone beyond our projection window
+    if (nextDate > projectionEndDate) break;
+    
+    projections.push({
+      title: `${task.title || `(task ${task.id})`} (recurring)`,
+      start: nextDate,
+      allDay: true,
+      backgroundColor: color ? `${color}80` : undefined, // 50% opacity
+      borderColor: color || undefined,
+      borderDashed: true,
+      classNames: ['recurring-projection'],
+      extendedProps: { 
+        taskId: task.id,
+        isProjection: true
+      }
+    });
+    
+    // Move to the next date
+    currentDate = nextDate;
+  }
+  
+  return projections;
 }
 
 async function refreshUIFromCache(cfg) {
@@ -630,6 +726,8 @@ async function refreshUIFromCache(cfg) {
     if (!dt) continue;
 
     const color = pickEventColor(t);
+    
+    // Add the actual scheduled event
     calendar.addEvent({
       title: t.title || `(task ${t.id})`,
       start: dt,
@@ -638,6 +736,12 @@ async function refreshUIFromCache(cfg) {
       borderColor: color || undefined,
       extendedProps: { taskId: t.id }
     });
+    
+    // Generate and add recurring projections if applicable
+    if (t.repeat_after && t.repeat_after > 0) {
+      const projections = generateRecurringProjections(t, dt, cfg);
+      projections.forEach(projection => calendar.addEvent(projection));
+    }
   }
 
   // Render unscheduled list
@@ -931,6 +1035,14 @@ window.addEventListener('DOMContentLoaded', async () => {
 // Persist settings as you type/change
 ['input', 'change'].forEach(evt => {
   els.dateField.addEventListener(evt, saveConfigToStorage);
+  els.showRecurring.addEventListener(evt, () => {
+    saveConfigToStorage();
+    refreshUIFromCache(config());
+  });
+  els.projectionWeeks.addEventListener(evt, () => {
+    saveConfigToStorage();
+    refreshUIFromCache(config());
+  });
 });
 
 els.clearBrowserBtn.addEventListener('click', () => {
@@ -947,6 +1059,10 @@ els.clearBrowserBtn.addEventListener('click', () => {
 
   // Clear input fields
   els.dateField.value = 'due_date';
+  
+  // Reset recurring event settings
+  els.showRecurring.checked = true;
+  els.projectionWeeks.value = '4';
 
   // Reset label UI
   if (els.labelsPicker) els.labelsPicker.innerHTML = '';
@@ -973,3 +1089,15 @@ if (els.unscheduledList) {
 if (els.unscheduledDrop) {
   els.unscheduledDrop.style.touchAction = 'pan-y';
 }
+
+// Add CSS for recurring projections
+const recurringStyle = document.createElement('style');
+recurringStyle.textContent = `
+  .recurring-projection {
+    opacity: 0.8;
+  }
+  .recurring-projection:hover {
+    opacity: 1;
+  }
+`;
+document.head.appendChild(recurringStyle);
