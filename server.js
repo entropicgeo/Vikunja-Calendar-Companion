@@ -6,7 +6,6 @@ const fetch = require('node-fetch');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -163,7 +162,7 @@ app.post('/api/tasks/:taskId/labels/bulk', async (req, res) => {
     const token = process.env.API_TOKEN;
     const taskId = req.params.taskId;
     const payload = req.body;
-    
+    console.log(payload);
     if (!baseUrl || !token) {
       return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
     }
@@ -178,7 +177,7 @@ app.post('/api/tasks/:taskId/labels/bulk', async (req, res) => {
       },
       body: JSON.stringify(payload)
     });
-    
+    console.log(url, payload, response);
     if (!response.ok) {
       const text = await response.text();
       return res.status(response.status).send(text);

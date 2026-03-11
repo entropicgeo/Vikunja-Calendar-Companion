@@ -147,11 +147,12 @@ async function updateTaskLabels(taskId, labelIds, operation) {
             
             // Get current label IDs to avoid duplicates
             const currentLabelIds = new Set((task.labels || []).map(label => label.id));
-            
+            console.log("Current", currentLabelIds);
             // Start with existing labels
             labelsToUpdate = [...(task.labels || [])];
-            
+            console.log(labelsToUpdate);
             // Add new labels that aren't already on the task
+            console.log(labelIds);
             for (const labelId of labelIds) {
                 if (!currentLabelIds.has(labelId)) {
                     const label = allLabels.find(l => l.id === labelId);
@@ -187,7 +188,7 @@ async function updateTaskLabels(taskId, labelIds, operation) {
                 labels: labelsToUpdate
             })
         });
-        
+        console.log(updateUrl.toString(), labelsToUpdate, updateResponse);
         if (!updateResponse.ok) {
             const text = await updateResponse.text();
             throw new Error(`Failed to update labels for task ${taskId} (${updateResponse.status}): ${text}`);
