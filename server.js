@@ -53,9 +53,8 @@ app.get('/api/tasks', async (req, res) => {
     const baseUrl = process.env.API_BASE_URL;
     const token = process.env.API_TOKEN;
     const page = req.query.page || 1;
-    const perPage = req.query.per_page || 250;
+    const perPage = req.query.per_page || 50;
     const filter = req.query.filter || 'done=false';
-    
     if (!baseUrl || !token) {
       return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
     }
@@ -63,7 +62,8 @@ app.get('/api/tasks', async (req, res) => {
     const url = new URL(`${baseUrl}/api/v1/tasks`);
     url.searchParams.set('page', String(page));
     url.searchParams.set('per_page', String(perPage));
-    url.searchParams.set('filter', filter);
+    // bulklabels page sending 'NONE'
+    if (filter !== 'NONE') url.searchParams.set('filter', filter);
     
     const response = await fetch(url.toString(), {
       headers: {

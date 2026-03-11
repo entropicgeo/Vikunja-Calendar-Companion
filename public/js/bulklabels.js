@@ -49,7 +49,7 @@ async function loadAllTasks() {
     
     try {
         const tasks = await fetchAllTasks();
-        allTasks = tasks.filter(task => !task.done); // Only show non-completed tasks
+        allTasks = tasks
         renderTasks(allTasks);
         renderParentTasks(allTasks);
         setStatus(`Loaded ${allTasks.length} tasks`);
@@ -60,13 +60,14 @@ async function loadAllTasks() {
 
 async function fetchAllTasks() {
     const tasks = [];
-    const perPage = 250;
+    const perPage = 50;
     let page = 1;
     
     while (true) {
         const url = new URL('/api/tasks', window.location.origin);
         url.searchParams.set('page', String(page));
         url.searchParams.set('per_page', String(perPage));
+        url.searchParams.set('filter', 'NONE');
         
         const response = await fetch(url.toString());
         if (!response.ok) {

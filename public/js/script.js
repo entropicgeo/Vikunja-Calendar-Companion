@@ -369,7 +369,7 @@ function setupExternalDraggable() {
 
 async function vikunjaFetchAllLabels(cfg) {
   const out = [];
-  const perPage = 250;
+  const perPage = 50;
   let page = 1;
 
   while (true) {
@@ -419,7 +419,7 @@ async function vikunjaFetchAllTasks(cfg) {
   // The public docs show GET /tasks; it is commonly paginated.
   // We'll page until we get an empty array.
   const out = [];
-  const perPage = 250; // tune as you like
+  const perPage = 50; // tune as you like
   let page = 1;
 
   while (true) {
