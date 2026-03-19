@@ -97,3 +97,19 @@ docker run --env-file .env -p 3000:${PORT:-3000} myapp
    ```bash
    docker compose up -d
    ```
+
+# Screenshots
+Recurring events will be projected a duration ahead on the calendar (only originating event can be drag and dropped)
+![Recurring events](https://github.com/user-attachments/assets/1489502c-4175-49de-9479-e539d7fd4dd2)
+
+Configuration pane collapses to show unscheduled tasks area
+![Drag and drop unscheduled tasks view](https://github.com/user-attachments/assets/46ad4ca0-1c06-4785-b585-6cbcf6275f24)
+
+Clicking a task opens a menu with some more details and a link to open the task in Vikunja
+![TaskView](https://github.com/user-attachments/assets/755627b6-c2d9-4c54-8fef-067bd4f68375)
+
+Bulk subtask assignment tool, accessible in hamburger menu
+![Bulk Subtask Assignment tool](https://github.com/user-attachments/assets/b85dff69-09f1-430a-95e4-4496ab544ae0)
+
+
+
