@@ -94,9 +94,16 @@ docker run --env-file .env -p 3000:${PORT:-3000} myapp
    Set the value of `API_TOKEN` to a token you made in Vikunja. The token must have permissions labels:read and tasks:read,readall,readone,update
 
 2. **Run docker compose**
-   ```bash
-   docker compose up -d
-   ```
+
+```
+services:
+  vikunja-cal:
+    image: ghcr.io/entropicgeo/vikunja-calendar-companion:latest
+    ports:
+      - 8088:3000
+    env_file:
+      - .env
+```
 
 # Screenshots
 Recurring events will be projected a duration ahead on the calendar (only originating event can be drag and dropped)
