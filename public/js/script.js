@@ -504,6 +504,27 @@ async function vikunjaUpdateTaskFull(cfg, taskId, patch) {
   return merged;
 }
 
+// Function to mark a task as done
+async function markTaskAsDone(taskId) {
+  const cfg = config();
+  setStatus(`Marking task ${taskId} as done...`);
+  
+  try {
+    // Update the task with done=true
+    await vikunjaUpdateTaskFull(cfg, taskId, { done: true });
+    
+    // Remove the task from our local cache since it's now done
+    // (we only show undone tasks in the calendar)
+    tasksById.delete(taskId);
+    
+    setStatus(`Task ${taskId} marked as done.`);
+  } catch (e) {
+    console.error(e);
+    setStatus(`Error marking task ${taskId} as done: ${e.message || String(e)}`);
+    throw e; // Re-throw to handle in the caller
+  }
+}
+
 function mergeTaskPreserveLabels(oldTask, updatedTask) {
   if (!oldTask) return updatedTask || null;
   if (!updatedTask) return oldTask;
@@ -842,6 +863,7 @@ const modal = {
   json: document.getElementById('modalJson'),
   open: document.getElementById('modalOpenLink'),
   openProject: document.getElementById('modalOpenProjectLink'),
+  markDone: document.getElementById('modalMarkDoneBtn'),
   close: document.getElementById('modalCloseBtn'),
   detailsGrid: document.getElementById('modalDetailsGrid'),
   commentsWrap: document.getElementById('modalCommentsWrap'),
@@ -851,6 +873,21 @@ const modal = {
 
 modal.close.addEventListener('click', () => modal.root.style.display = 'none');
 modal.root.addEventListener('click', (e) => { if (e.target === modal.root) modal.root.style.display = 'none'; });
+
+// Add event listener for the Mark Done button
+let currentTaskId = null; // Track the currently displayed task ID
+modal.markDone.addEventListener('click', async () => {
+  if (currentTaskId) {
+    try {
+      await markTaskAsDone(currentTaskId);
+      modal.root.style.display = 'none'; // Close the modal
+      await loadEverything(); // Reload all tasks
+    } catch (e) {
+      console.error(e);
+      setStatus(`Error marking task ${currentTaskId} as done: ${e.message || String(e)}`);
+    }
+  }
+});
 
 function escapeHtml(s) {
   return String(s ?? '')
@@ -992,6 +1029,9 @@ function renderComments(comments) {
 async function showTaskDetails(taskId) {
   const cfg = config();
   setStatus(`Loading task ${taskId}...`);
+  
+  // Store the current task ID for the Mark Done button
+  currentTaskId = taskId;
 
   let t = null;
   try {
