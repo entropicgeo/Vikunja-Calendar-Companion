@@ -152,6 +152,17 @@ function taskUiLink(taskId) {
   return `/tasks/${taskId}`;
 }
 
+function projectUiLink(projectId) {
+  // Use the server-provided base URL for Vikunja UI links
+  if (serverConfig.baseUrl) {
+    // Convert API URL to UI URL by removing /api/v1 if present
+    const uiBaseUrl = serverConfig.baseUrl.replace(/\/api\/v1\/?$/, '');
+    return `${uiBaseUrl}/projects/${projectId}`;
+  }
+  // Fall back to relative URL if no base URL is available
+  return `/projects/${projectId}`;
+}
+
 function pad2(n) { return String(n).padStart(2, '0'); }
 
 function tzOffsetRFC3339(d) {
@@ -798,6 +809,7 @@ const modal = {
   desc: document.getElementById('modalDescription'),
   json: document.getElementById('modalJson'),
   open: document.getElementById('modalOpenLink'),
+  openProject: document.getElementById('modalOpenProjectLink'),
   close: document.getElementById('modalCloseBtn'),
   detailsGrid: document.getElementById('modalDetailsGrid'),
   commentsWrap: document.getElementById('modalCommentsWrap'),
@@ -966,6 +978,14 @@ async function showTaskDetails(taskId) {
   modal.title.textContent = t.title || `(task ${taskId})`;
   modal.meta.textContent = `#${taskId} • project_id=${t.project_id ?? '—'} • list_id=${t.list_id ?? '—'}`;
   modal.open.href = taskUiLink(taskId);
+  
+  // Set project link if project_id exists
+  if (t.project_id) {
+    modal.openProject.href = projectUiLink(t.project_id);
+    modal.openProject.style.display = '';
+  } else {
+    modal.openProject.style.display = 'none';
+  }
 
   // Details grid
   renderDetailsGrid(t);
