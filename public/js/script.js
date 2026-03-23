@@ -181,8 +181,12 @@ function toLocalRFC3339(d) {
          `${tzOffsetRFC3339(d)}`;
 }
 
-function toLocalRFC3339Midnight(d) {
-  const m = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 18, 0, 0);
+function toLocalRFC3339WithTime(d, useTime = false) {
+  // If useTime is false, set to 18:00 (default end of workday)
+  // If useTime is true, keep the actual time from the date object
+  const m = useTime 
+    ? new Date(d) 
+    : new Date(d.getFullYear(), d.getMonth(), d.getDate(), 18, 0, 0);
   return toLocalRFC3339(m);
 }
 function parseISO(iso) {
@@ -532,6 +536,15 @@ function ensureCalendar() {
     eventStartEditable: true,
     eventDurationEditable: false,
     eventResizableFromStart: false,
+    slotDuration: '00:30:00', // 30-minute slots in time grid
+    slotLabelFormat: {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    },
+    // Default time range for day/week views
+    slotMinTime: '06:00:00',
+    slotMaxTime: '22:00:00',
     
     // Custom event rendering for recurring projections
     eventDidMount: (arg) => {
@@ -569,8 +582,12 @@ function ensureCalendar() {
 
       try {
         setStatus(`Scheduling task ${taskId}...`);
-        // Use the date you dropped on, as all-day start.
-        const iso = toLocalRFC3339Midnight(info.date);
+        
+        // Check if we're in day view to use specific time
+        const isTimeSpecific = calendar.view.type === 'timeGridDay' || calendar.view.type === 'timeGridWeek';
+        
+        // Use the date and time you dropped on
+        const iso = toLocalRFC3339WithTime(info.date, isTimeSpecific);
         
         await vikunjaUpdateTaskFull(cfg, taskId, { [cfg.dateField]: iso });
 
@@ -580,7 +597,9 @@ function ensureCalendar() {
 
         await refreshUIFromCache(cfg);
 
-        setStatus(`Scheduled task ${taskId} on ${info.date.toDateString()}.`);
+        const timeStr = isTimeSpecific ? 
+          ` at ${info.date.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'})}` : '';
+        setStatus(`Scheduled task ${taskId} on ${info.date.toDateString()}${timeStr}.`);
       } catch (e) {
         console.error(e);
         setStatus(String(e.message || e));
@@ -598,7 +617,11 @@ function ensureCalendar() {
 
       try {
         setStatus(`Updating task ${taskId}...`);
-        const iso = toLocalRFC3339Midnight(info.event.start);
+        
+        // Check if the event is time-specific or all-day
+        const isTimeSpecific = !info.event.allDay;
+        
+        const iso = toLocalRFC3339WithTime(info.event.start, isTimeSpecific);
         
         await vikunjaUpdateTaskFull(cfg, taskId, { [cfg.dateField]: iso });
 
@@ -606,7 +629,11 @@ function ensureCalendar() {
         const t = tasksById.get(taskId);
         if (t) t[cfg.dateField] = iso;
 
-        await refreshUIFromCache(cfg);setStatus(`Updated task ${taskId}.`);
+        await refreshUIFromCache(cfg);
+        
+        const timeStr = isTimeSpecific ? 
+          ` at ${info.event.start.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'})}` : '';
+        setStatus(`Updated task ${taskId} to ${info.event.start.toDateString()}${timeStr}.`);
       } catch (e) {
         console.error(e);
         setStatus(String(e.message || e));
@@ -676,7 +703,9 @@ function generateRecurringProjections(task, baseDate, cfg) {
   }
   
   const color = pickEventColor(task);
-  const secondsInDay = 86400; // 24 * 60 * 60
+  
+  // Check if the base date has a specific time
+  const hasSpecificTime = baseDate.getHours() !== 0 || baseDate.getMinutes() !== 0;
   
   // Calculate end date based on projection weeks setting
   const today = new Date();
@@ -697,7 +726,7 @@ function generateRecurringProjections(task, baseDate, cfg) {
     projections.push({
       title: `${task.title || `(task ${task.id})`} (recurring)`,
       start: nextDate,
-      allDay: true,
+      allDay: !hasSpecificTime, // Only all-day if original task has no specific time
       backgroundColor: color ? `${color}80` : undefined, // 50% opacity
       borderColor: color || undefined,
       borderDashed: true,
@@ -738,11 +767,14 @@ async function refreshUIFromCache(cfg) {
 
     const color = pickEventColor(t);
     
+    // Check if this has a non-midnight time
+    const hasSpecificTime = dt.getHours() !== 0 || dt.getMinutes() !== 0;
+    
     // Add the actual scheduled event
     calendar.addEvent({
       title: t.title || `(task ${t.id})`,
       start: dt,
-      allDay: true,
+      allDay: !hasSpecificTime, // Only all-day if no specific time
       backgroundColor: color || undefined,
       borderColor: color || undefined,
       extendedProps: { taskId: t.id }
