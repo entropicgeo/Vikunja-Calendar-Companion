@@ -99,6 +99,18 @@ header h1 {
   background: rgba(255,255,255,0.06);
 }
 
+/* Modal link buttons styling */
+#modalOpenLink, #modalOpenProjectLink {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 8px;
+  transition: background 0.15s ease;
+}
+
+#modalOpenLink:hover, #modalOpenProjectLink:hover {
+  background: rgba(255,255,255,0.06);
+}
+
 .app {
   display: grid;
   grid-template-columns: 340px 1fr;
