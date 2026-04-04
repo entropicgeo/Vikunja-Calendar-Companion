@@ -2,10 +2,58 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fetch = require('node-fetch');
+const { Low } = require('lowdb');
+const { JSONFile } = require('lowdb/node');
 //require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Setup lowdb
+const dbFile = path.join(__dirname, 'db.json');
+const adapter = new JSONFile(dbFile);
+const db = new Low(adapter, { dayColors: {} }); // Provide default data structure
+
+// Initialize the database
+(async () => {
+  try {
+    // Read the database or create it with default structure
+    await db.read();
+    console.log('Database initialized successfully');
+    
+    // Ensure all required structures exist
+    db.data = db.data || {};
+    db.data.dayColors = db.data.dayColors || {};
+    db.data.colorLabels = db.data.colorLabels || {
+      red: "Red",
+      green: "Green",
+      blue: "Blue",
+      yellow: "Yellow",
+      purple: "Purple"
+    };
+    
+    await db.write();
+  } catch (error) {
+    console.error('Error reading database:', error);
+    // Ensure the default structure is set
+    db.data = { 
+      dayColors: {},
+      colorLabels: {
+        red: "Red",
+        green: "Green",
+        blue: "Blue",
+        yellow: "Yellow",
+        purple: "Purple"
+      }
+    };
+    try {
+      await db.write();
+      console.log('Created new database with default structure');
+    } catch (writeError) {
+      console.error('Failed to write default database structure:', writeError);
+    }
+  }
+})();
 // Middleware
 app.use(cors());
 app.use(express.json());
@@ -234,6 +282,137 @@ app.get('/api/config', (req, res) => {
   res.json({
     baseUrl: process.env.API_BASE_URL
   });
+});
+
+// Day color endpoints
+app.get('/api/daycolors', async (req, res) => {
+  try {
+    await db.read();
+    // Ensure we have a valid dayColors object
+    if (!db.data || !db.data.dayColors) {
+      console.log('Missing dayColors in database, returning empty object');
+      return res.json({});
+    }
+    res.json(db.data.dayColors);
+  } catch (error) {
+    console.error('Error fetching day colors:', error);
+    // Return empty object instead of error to allow app to continue working
+    res.json({});
+  }
+});
+
+// Color labels endpoints
+app.get('/api/colorlabels', async (req, res) => {
+  try {
+    await db.read();
+    // Ensure we have a valid colorLabels object
+    if (!db.data || !db.data.colorLabels) {
+      console.log('Missing colorLabels in database, returning default labels');
+      return res.json({
+        red: "Red",
+        green: "Green",
+        blue: "Blue",
+        yellow: "Yellow",
+        purple: "Purple"
+      });
+    }
+    res.json(db.data.colorLabels);
+  } catch (error) {
+    console.error('Error fetching color labels:', error);
+    // Return default labels instead of error to allow app to continue working
+    res.json({
+      red: "Red",
+      green: "Green",
+      blue: "Blue",
+      yellow: "Yellow",
+      purple: "Purple"
+    });
+  }
+});
+
+app.post('/api/daycolors', async (req, res) => {
+  try {
+    const { date, color } = req.body;
+    
+    if (!date) {
+      return res.status(400).json({ error: 'Date is required' });
+    }
+    
+    await db.read();
+    
+    // Ensure db.data and dayColors exist
+    if (!db.data) db.data = {};
+    if (!db.data.dayColors) db.data.dayColors = {};
+    
+    // If color is null, remove the entry (clear color)
+    if (color === null) {
+      delete db.data.dayColors[date];
+    } else {
+      // Validate color before saving
+      const validColors = ['red', 'green', 'blue', 'yellow', 'purple'];
+      if (validColors.includes(color)) {
+        db.data.dayColors[date] = color;
+      } else {
+        return res.status(400).json({ error: 'Invalid color value' });
+      }
+    }
+    
+    await db.write();
+    res.json({ success: true, date, color });
+  } catch (error) {
+    console.error('Error saving day color:', error);
+    // Return a more graceful error that won't break the UI
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      message: 'Failed to save color, but you can continue using the app'
+    });
+  }
+});
+
+app.post('/api/colorlabels', async (req, res) => {
+  try {
+    const { colorKey, label } = req.body;
+    
+    if (!colorKey) {
+      return res.status(400).json({ error: 'Color key is required' });
+    }
+    
+    if (!label || typeof label !== 'string') {
+      return res.status(400).json({ error: 'Label must be a non-empty string' });
+    }
+    
+    await db.read();
+    
+    // Ensure db.data and colorLabels exist
+    if (!db.data) db.data = {};
+    if (!db.data.colorLabels) db.data.colorLabels = {
+      red: "Red",
+      green: "Green",
+      blue: "Blue",
+      yellow: "Yellow",
+      purple: "Purple"
+    };
+    
+    // Validate color key before saving
+    const validColors = ['red', 'green', 'blue', 'yellow', 'purple'];
+    if (validColors.includes(colorKey)) {
+      db.data.colorLabels[colorKey] = label;
+    } else {
+      return res.status(400).json({ error: 'Invalid color key' });
+    }
+    
+    await db.write();
+    res.json({ success: true, colorKey, label });
+  } catch (error) {
+    console.error('Error saving color label:', error);
+    // Return a more graceful error that won't break the UI
+    res.status(500).json({ 
+      success: false, 
+      error: error.message,
+      message: 'Failed to save color label, but you can continue using the app'
+    });
+  }
 });
 
 // Serve the index.html for any other routes
