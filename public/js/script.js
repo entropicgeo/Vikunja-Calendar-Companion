@@ -95,6 +95,19 @@ let serverConfig = {
   baseUrl: null
 };
 
+// Day colors
+let dayColors = {};
+let selectedDate = null;
+
+// Color labels
+let colorLabels = {
+  red: "Red",
+  green: "Green",
+  blue: "Blue",
+  yellow: "Yellow",
+  purple: "Purple"
+};
+
 // Fetch server config on startup
 async function fetchServerConfig() {
   try {
@@ -105,6 +118,98 @@ async function fetchServerConfig() {
   } catch (error) {
     console.error('Failed to fetch server config:', error);
   }
+}
+
+// Fetch day colors from the server
+async function fetchDayColors() {
+  try {
+    const response = await fetch('/api/daycolors');
+    if (response.ok) {
+      const data = await response.json();
+      // Ensure we have a valid object
+      dayColors = data && typeof data === 'object' ? data : {};
+      return dayColors;
+    }
+  } catch (error) {
+    console.error('Failed to fetch day colors:', error);
+  }
+  // Return empty object as fallback
+  dayColors = {};
+  return dayColors;
+}
+
+// Fetch color labels from the server
+async function fetchColorLabels() {
+  try {
+    const response = await fetch('/api/colorlabels');
+    if (response.ok) {
+      const data = await response.json();
+      // Ensure we have a valid object
+      colorLabels = data && typeof data === 'object' ? data : {
+        red: "Red",
+        green: "Green",
+        blue: "Blue",
+        yellow: "Yellow",
+        purple: "Purple"
+      };
+      return colorLabels;
+    }
+  } catch (error) {
+    console.error('Failed to fetch color labels:', error);
+  }
+  // Return default labels as fallback
+  colorLabels = {
+    red: "Red",
+    green: "Green",
+    blue: "Blue",
+    yellow: "Yellow",
+    purple: "Purple"
+  };
+  return colorLabels;
+}
+
+// Save a day color to the server
+async function saveDayColor(date, color) {
+  try {
+    const response = await fetch('/api/daycolors', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ date, color }),
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      return result;
+    }
+  } catch (error) {
+    console.error('Failed to save day color:', error);
+    setStatus(`Error saving day color: ${error.message}`);
+  }
+  return null;
+}
+
+// Save a color label to the server
+async function saveColorLabel(colorKey, label) {
+  try {
+    const response = await fetch('/api/colorlabels', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ colorKey, label }),
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      return result;
+    }
+  } catch (error) {
+    console.error('Failed to save color label:', error);
+    setStatus(`Error saving color label: ${error.message}`);
+  }
+  return null;
 }
 
 function config() {
@@ -765,6 +870,15 @@ function ensureCalendar() {
       center: 'title',
       right: 'dayGridMonth,timeGridWeek,timeGridDay'
     },
+    dateClick: handleDateClick,
+    dayCellDidMount: function(info) {
+      // Apply day colors when cells are mounted
+      const dateStr = info.date.toISOString().split('T')[0];
+      const color = dayColors[dateStr];
+      if (color) {
+        applyDayColor(info.el, color);
+      }
+    },
     editable: true,
     droppable: true, // accept external drags
     selectable: false,
@@ -1331,6 +1445,56 @@ async function refreshUIFromCache(cfg) {
   renderUnscheduled(unscheduled);
 }
 
+// Handle date click in the calendar
+function handleDateClick(info) {
+  // Store the selected date
+  selectedDate = info.dateStr;
+  
+  // Update the display
+  const displayEl = document.getElementById('selectedDateDisplay');
+  if (displayEl) {
+    displayEl.textContent = `Selected: ${selectedDate}`;
+  }
+  
+  // Highlight the selected date
+  const allDayCells = document.querySelectorAll('.fc-daygrid-day');
+  allDayCells.forEach(cell => {
+    cell.classList.remove('day-selected');
+  });
+  
+  info.dayEl.classList.add('day-selected');
+  
+  // Update color button states
+  updateColorButtonStates(selectedDate);
+}
+
+// Apply color to a day cell
+function applyDayColor(dayEl, color) {
+  if (!dayEl) return;
+  
+  // Remove any existing color classes
+  dayEl.classList.remove('day-color-red', 'day-color-green', 'day-color-blue', 'day-color-yellow', 'day-color-purple');
+  
+  // Apply the new color class if not "none" and is a valid color
+  if (color && color !== 'none' && ['red', 'green', 'blue', 'yellow', 'purple'].includes(color)) {
+    dayEl.classList.add(`day-color-${color}`);
+  }
+}
+
+// Update color button states based on selected date
+function updateColorButtonStates(dateStr) {
+  const buttons = document.querySelectorAll('.color-btn');
+  // Safely access dayColors with fallback to 'none'
+  const currentColor = dayColors && dateStr in dayColors ? dayColors[dateStr] : 'none';
+  
+  buttons.forEach(btn => {
+    btn.classList.remove('active');
+    if (btn.dataset.color === currentColor) {
+      btn.classList.add('active');
+    }
+  });
+}
+
 async function loadEverything() {
   const cfg = config();
   
@@ -1338,6 +1502,15 @@ async function loadEverything() {
   if (!labelsById || labelsById.size === 0) {
     await loadLabelsOnly();
   }
+
+  // Load day colors and color labels
+  await Promise.all([
+    fetchDayColors(),
+    fetchColorLabels()
+  ]);
+  
+  // Update UI with custom color labels
+  updateColorButtonLabels();
 
   // warn if config changed since last load (dateField affects split)
   const h = configHash(cfg);
@@ -1675,7 +1848,105 @@ window.addEventListener('DOMContentLoaded', async () => {
   loadConfigFromStorage();
   // Then load labels
   await loadLabelsOnly();
+  // Load day colors
+  await fetchDayColors();
+  // Load color labels
+  await fetchColorLabels();
+  
+  // Set up color picker buttons
+  setupColorPickerButtons();
+  
+  // Set up color label customization
+  setupColorLabelCustomization();
 });
+
+// Set up color picker buttons
+function setupColorPickerButtons() {
+  const colorButtons = document.querySelectorAll('.color-btn');
+  
+  colorButtons.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      if (!selectedDate) {
+        setStatus('Please select a date first');
+        return;
+      }
+      
+      const color = btn.dataset.color;
+      const colorToSave = color === 'none' ? null : color;
+      
+      // Update UI immediately
+      const dateCell = document.querySelector(`.fc-day[data-date="${selectedDate}"], .fc-daygrid-day[data-date="${selectedDate}"]`);
+      if (dateCell) {
+        applyDayColor(dateCell, colorToSave);
+      }
+      
+      // Update button states
+      colorButtons.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      
+      // Save to server
+      await saveDayColor(selectedDate, colorToSave);
+      
+      // Update local cache
+      if (colorToSave === null) {
+        delete dayColors[selectedDate];
+      } else {
+        dayColors[selectedDate] = color;
+      }
+      
+      setStatus(`Updated color for ${selectedDate} to ${colorLabels[color] || color}`);
+    });
+  });
+  
+  // Update button labels with custom labels
+  updateColorButtonLabels();
+}
+
+// Update color button labels based on custom labels
+function updateColorButtonLabels() {
+  const colorButtons = document.querySelectorAll('.color-btn');
+  
+  colorButtons.forEach(btn => {
+    const color = btn.dataset.color;
+    if (color && color !== 'none' && colorLabels[color]) {
+      btn.textContent = colorLabels[color];
+    }
+  });
+}
+
+// Set up color label customization
+function setupColorLabelCustomization() {
+  const editButtons = document.querySelectorAll('.edit-color-label');
+  
+  editButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const colorKey = btn.dataset.color;
+      const currentLabel = colorLabels[colorKey] || colorKey;
+      
+      // Prompt for new label
+      const newLabel = prompt(`Enter new name for ${colorKey} color:`, currentLabel);
+      
+      if (newLabel !== null && newLabel.trim() !== '') {
+        // Save to server
+        saveColorLabel(colorKey, newLabel.trim());
+        
+        // Update local cache
+        colorLabels[colorKey] = newLabel.trim();
+        
+        // Update UI
+        updateColorButtonLabels();
+        
+        // Update the edit button's label display
+        const labelDisplay = btn.previousElementSibling;
+        if (labelDisplay && labelDisplay.classList.contains('color-label-display')) {
+          labelDisplay.textContent = newLabel.trim();
+        }
+        
+        setStatus(`Updated label for ${colorKey} color to "${newLabel.trim()}"`);
+      }
+    });
+  });
+}
 
 // Persist settings as you type/change
 ['input', 'change'].forEach(evt => {
@@ -1780,6 +2051,49 @@ recurringStyle.textContent = `
     z-index: 5;
     background-color: rgba(255, 204, 0, 0.1) !important;
     outline: 2px solid #ffcc00 !important;
+  }
+  
+  /* Day color styles */
+  .day-selected {
+    box-shadow: inset 0 0 0 2px #ffcc00 !important;
+  }
+  
+  .color-btn {
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+  }
+  
+  .color-btn:hover {
+    transform: translateY(-2px);
+  }
+  
+  .color-btn.active {
+    box-shadow: 0 0 0 2px #ffcc00;
+    font-weight: bold;
+  }
+  
+  /* Day color classes */
+  .day-color-red {
+    background-color: rgba(255, 99, 71, 0.2) !important;
+  }
+  
+  .day-color-green {
+    background-color: rgba(50, 205, 50, 0.2) !important;
+  }
+  
+  .day-color-blue {
+    background-color: rgba(30, 144, 255, 0.2) !important;
+  }
+  
+  .day-color-yellow {
+    background-color: rgba(255, 215, 0, 0.2) !important;
+  }
+  
+  .day-color-purple {
+    background-color: rgba(138, 43, 226, 0.2) !important;
   }
 `;
 document.head.appendChild(recurringStyle);
