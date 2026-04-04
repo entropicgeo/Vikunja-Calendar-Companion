@@ -6,6 +6,8 @@ let lastLoadedConfigHash = null;
 let labelsById = new Map();            // id -> {id,title,hex_color,...}
 let labelSelectionById = {};           // id -> boolean (true=include)
 let suspendConfigSave = false;
+let selectedEvents = new Set();    // Set of event IDs that are currently selected
+let selectedUnscheduledTasks = new Set(); // Set of task IDs for selected unscheduled tasks
 
 const els = {
   dateField: document.getElementById('dateField'),
@@ -23,6 +25,8 @@ const els = {
   clearBrowserBtn: document.getElementById('clearBrowserBtn'),
   showRecurring: document.getElementById('showRecurring'),
   projectionWeeks: document.getElementById('projectionWeeks'),
+  clearSelectionBtn: document.getElementById('clearSelectionBtn'),
+  selectedCount: document.getElementById('selectedCount'),
 };
 els.labelsPicker.innerHTML = '<div class="small">Press “Load labels” to populate.</div>';
 
@@ -75,6 +79,7 @@ els.clearBtn.addEventListener('click', () => {
   setStatus('');
   clearUnscheduled();
   if (calendar) calendar.removeAllEvents();
+  clearEventSelection();
 });
 
 els.loadBtn.addEventListener('click', async () => {
@@ -335,6 +340,11 @@ function renderUnscheduled(tasks) {
     const div = document.createElement('div');
     div.className = 'task';
     div.setAttribute('data-task-id', String(task.id));
+    
+    // Add selected class if this task is in the selected set
+    if (selectedUnscheduledTasks.has(task.id)) {
+      div.classList.add('task-selected');
+    }
 
     const title = document.createElement('div');
     title.className = 'title';
@@ -539,6 +549,210 @@ function mergeTaskPreserveLabels(oldTask, updatedTask) {
   return merged;
 }
 
+// Function to handle event selection
+function toggleEventSelection(event, ctrlKey = false) {
+  const eventId = event.id;
+  
+  console.log(`toggleEventSelection: eventId=${eventId}, ctrlKey=${ctrlKey}, currentlySelected=${selectedEvents.has(eventId)}`);
+  console.log(`Current selections before: ${Array.from(selectedEvents).join(', ')}`);
+  
+  // If not holding Ctrl/Cmd and clicking on any event, clear other selections first
+  if (!ctrlKey) {
+    console.log('Not using Ctrl key, clearing all other selections');
+    // Clear all selections except the current one if it's selected
+    const wasSelected = selectedEvents.has(eventId);
+    clearEventSelection();
+    // If it was selected, we'll toggle it off in the next step
+    if (wasSelected) {
+      console.log(`Event ${eventId} was already selected, will be toggled off`);
+    }
+  }
+  
+  // Toggle the clicked event's selection state
+  if (selectedEvents.has(eventId)) {
+    console.log(`Removing selection for ${eventId}`);
+    selectedEvents.delete(eventId);
+    updateEventSelectionStyle(event, false);
+  } else {
+    console.log(`Adding selection for ${eventId}`);
+    selectedEvents.add(eventId);
+    updateEventSelectionStyle(event, true);
+  }
+  
+  console.log(`Current selections after: ${Array.from(selectedEvents).join(', ')}`);
+  
+  // Update selection count and refresh selection styling
+  updateSelectionCount();
+  
+  // Ensure all selected events have proper styling
+  refreshAllSelectionStyles();
+}
+
+// Function to refresh all selection styles
+function refreshAllSelectionStyles() {
+  console.log(`Refreshing styles for all ${selectedEvents.size} selected events`);
+  
+  // First attempt immediate refresh
+  selectedEvents.forEach(eventId => {
+    const event = calendar.getEventById(eventId);
+    if (event) {
+      updateEventSelectionStyle(event, true);
+    } else {
+      console.log(`Could not find event object with ID ${eventId}`);
+      // Try to find and style the element directly
+      const eventElements = document.querySelectorAll('.fc-event');
+      let found = false;
+      
+      for (const el of eventElements) {
+        if ((el.fcSeg && el.fcSeg.eventRange && el.fcSeg.eventRange.def.publicId === eventId) ||
+            el.getAttribute('data-event-id') === eventId) {
+          el.classList.add('event-selected');
+          if (!el.querySelector('.event-selected-indicator')) {
+            const indicator = document.createElement('div');
+            indicator.className = 'event-selected-indicator';
+            indicator.innerHTML = '✓';
+            el.appendChild(indicator);
+            el.setAttribute('data-event-id', eventId);
+          }
+          found = true;
+          console.log(`Applied styling directly to DOM element for event ${eventId}`);
+          break;
+        }
+      }
+      
+      if (!found) {
+        console.log(`Could not find DOM element for event ${eventId}`);
+      }
+    }
+  });
+  
+  // Then schedule multiple refresh attempts with increasing delays
+  [50, 200, 500].forEach(delay => {
+    setTimeout(() => {
+      if (selectedEvents.size > 0) {
+        console.log(`Delayed refresh attempt after ${delay}ms`);
+        selectedEvents.forEach(eventId => {
+          const event = calendar.getEventById(eventId);
+          if (event && event.el) {
+            updateEventSelectionStyle(event, true);
+            console.log(`Refreshed selection styling for event ${eventId} after ${delay}ms`);
+          }
+        });
+      }
+    }, delay);
+  });
+}
+
+// Update the visual style of selected events
+function updateEventSelectionStyle(event, isSelected) {
+  // Find the event element by querying the DOM directly if needed
+  let eventEl = null;
+  
+  // Try different methods to find the element
+  if (event.el) {
+    eventEl = event.el;
+  } else if (calendar.getEventById(event.id)?.el) {
+    eventEl = calendar.getEventById(event.id).el;
+  } else {
+    // Try to find by DOM query if the element isn't directly accessible
+    const eventElements = document.querySelectorAll('.fc-event');
+    for (const el of eventElements) {
+      if (el.fcSeg && el.fcSeg.eventRange && el.fcSeg.eventRange.def.publicId === event.id) {
+        eventEl = el;
+        break;
+      }
+    }
+    
+    // If still not found, try by data attribute that might be set
+    if (!eventEl) {
+      eventEl = document.querySelector(`[data-event-id="${event.id}"]`);
+    }
+  }
+  
+  if (!eventEl) {
+    console.log(`Cannot find element for event ${event.id}, will try again later`);
+    // Schedule a retry after a short delay
+    setTimeout(() => {
+      const updatedEvent = calendar.getEventById(event.id);
+      if (updatedEvent && updatedEvent.el) {
+        updateEventSelectionStyle(updatedEvent, isSelected);
+      }
+    }, 50);
+    return;
+  }
+  
+  if (isSelected) {
+    // Add selection styling
+    eventEl.classList.add('event-selected');
+    // Add a checkmark or selection indicator
+    if (!eventEl.querySelector('.event-selected-indicator')) {
+      const indicator = document.createElement('div');
+      indicator.className = 'event-selected-indicator';
+      indicator.innerHTML = '✓';
+      eventEl.appendChild(indicator);
+      
+      // Also add a data attribute for easier selection later
+      eventEl.setAttribute('data-event-id', event.id);
+    }
+    console.log(`Applied selection styling to event ${event.id}`);
+  } else {
+    // Remove selection styling
+    eventEl.classList.remove('event-selected');
+    // Remove the selection indicator
+    const indicator = eventEl.querySelector('.event-selected-indicator');
+    if (indicator) indicator.remove();
+    console.log(`Removed selection styling from event ${event.id}`);
+  }
+}
+
+// Clear all selections (both calendar events and unscheduled tasks)
+function clearAllSelections() {
+  console.log('Clearing all selections');
+  console.log(`Calendar selections before clear: ${Array.from(selectedEvents).join(', ')}`);
+  console.log(`Unscheduled selections before clear: ${Array.from(selectedUnscheduledTasks).join(', ')}`);
+  
+  // Remove styling from all selected calendar events
+  selectedEvents.forEach(eventId => {
+    const event = calendar.getEventById(eventId);
+    if (event) updateEventSelectionStyle(event, false);
+  });
+  
+  // Remove styling from all selected unscheduled tasks
+  selectedUnscheduledTasks.forEach(taskId => {
+    const taskEl = document.querySelector(`.task[data-task-id="${taskId}"]`);
+    if (taskEl) taskEl.classList.remove('task-selected');
+  });
+  
+  // Clear both selection sets
+  selectedEvents.clear();
+  selectedUnscheduledTasks.clear();
+  updateSelectionCount();
+  
+  console.log('All selections cleared');
+}
+
+// Alias for backward compatibility
+function clearEventSelection() {
+  clearAllSelections();
+}
+
+// Update the selection count display
+function updateSelectionCount() {
+  const totalSelected = selectedEvents.size + selectedUnscheduledTasks.size;
+  
+  if (els.selectedCount) {
+    els.selectedCount.textContent = totalSelected;
+    els.selectedCount.parentElement.style.display = totalSelected > 0 ? 'flex' : 'none';
+  }
+  
+  // Debug: log current selections whenever count changes
+  console.log(`Selection count updated: ${totalSelected} items selected`);
+  console.log(`Calendar events selected: ${selectedEvents.size}`);
+  console.log(`Unscheduled tasks selected: ${selectedUnscheduledTasks.size}`);
+  console.log(`Calendar selections: ${Array.from(selectedEvents).join(', ')}`);
+  console.log(`Unscheduled selections: ${Array.from(selectedUnscheduledTasks).join(', ')}`);
+}
+
 function ensureCalendar() {
   if (calendar) return;
 
@@ -578,6 +792,9 @@ function ensureCalendar() {
       arg.el.style.borderRadius = '10px';
       arg.el.style.borderWidth = '1px';
       
+      // Add data attribute for easier selection
+      arg.el.setAttribute('data-event-id', arg.event.id);
+      
       // Special styling for recurring projections
       if (arg.event.extendedProps?.isProjection) {
         // Add dashed border
@@ -593,6 +810,15 @@ function ensureCalendar() {
           titleEl.appendChild(iconSpan);
         }
       }
+      
+      // Restore selection state if this event was previously selected
+      if (selectedEvents.has(arg.event.id)) {
+        console.log(`Event ${arg.event.id} mounted and is selected, applying styling`);
+        // Use setTimeout to ensure the element is fully in the DOM
+        setTimeout(() => {
+          updateEventSelectionStyle(arg.event, true);
+        }, 0);
+      }
     },
 
     drop: async (info) => {
@@ -602,7 +828,8 @@ function ensureCalendar() {
       if (!taskId) return;
 
       try {
-        setStatus(`Scheduling task ${taskId}...`);
+        // Check if this is part of a multi-selection of unscheduled tasks
+        const isMultiSelection = selectedUnscheduledTasks.size > 1 && selectedUnscheduledTasks.has(taskId);
         
         // Check if we're in day view to use specific time
         const isTimeSpecific = calendar.view.type === 'timeGridDay' || calendar.view.type === 'timeGridWeek';
@@ -610,17 +837,60 @@ function ensureCalendar() {
         // Use the date and time you dropped on
         const iso = toLocalRFC3339WithTime(info.date, isTimeSpecific);
         
-        await vikunjaUpdateTaskFull(cfg, taskId, { [cfg.dateField]: iso });
+        if (isMultiSelection) {
+          // Handle multi-selection drop
+          setStatus(`Scheduling ${selectedUnscheduledTasks.size} selected tasks...`);
+          
+          // Process tasks sequentially to avoid overwhelming the API
+          let updatedCount = 0;
+          
+          for (const selectedTaskId of selectedUnscheduledTasks) {
+            try {
+              // Update the task one at a time
+              await vikunjaUpdateTaskFull(cfg, selectedTaskId, { [cfg.dateField]: iso });
+              
+              // Update cache
+              const t = tasksById.get(selectedTaskId);
+              if (t) t[cfg.dateField] = iso;
+              updatedCount++;
+              
+              // Small delay between requests to reduce server load
+              if (selectedUnscheduledTasks.size > 5) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
+            } catch (e) {
+              console.error(`Failed to schedule task ${selectedTaskId}:`, e);
+            }
+          }
+          
+          // Clear selections after scheduling
+          clearAllSelections();
+          
+          // Refresh UI
+          await refreshUIFromCache(cfg);
+          
+          const timeStr = isTimeSpecific ? 
+            ` at ${info.date.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'})}` : '';
+          setStatus(`Scheduled ${updatedCount} tasks on ${info.date.toDateString()}${timeStr}.`);
+        } else {
+          // Handle single task drop
+          setStatus(`Scheduling task ${taskId}...`);
+          
+          await vikunjaUpdateTaskFull(cfg, taskId, { [cfg.dateField]: iso });
 
-        // Ensure cache reflects intended field even if server echoes oddly
-        const t = tasksById.get(taskId);
-        if (t) t[cfg.dateField] = iso;
+          // Ensure cache reflects intended field even if server echoes oddly
+          const t = tasksById.get(taskId);
+          if (t) t[cfg.dateField] = iso;
 
-        await refreshUIFromCache(cfg);
+          // Clear selections
+          clearAllSelections();
+          
+          await refreshUIFromCache(cfg);
 
-        const timeStr = isTimeSpecific ? 
-          ` at ${info.date.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'})}` : '';
-        setStatus(`Scheduled task ${taskId} on ${info.date.toDateString()}${timeStr}.`);
+          const timeStr = isTimeSpecific ? 
+            ` at ${info.date.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'})}` : '';
+          setStatus(`Scheduled task ${taskId} on ${info.date.toDateString()}${timeStr}.`);
+        }
       } catch (e) {
         console.error(e);
         setStatus(String(e.message || e));
@@ -637,24 +907,80 @@ function ensureCalendar() {
       if (!taskId) return;
 
       try {
-        setStatus(`Updating task ${taskId}...`);
+        // Check if this is part of a multi-selection
+        const isMultiSelection = selectedEvents.size > 1 && selectedEvents.has(info.event.id);
         
-        // Check if the event is time-specific or all-day
-        const isTimeSpecific = !info.event.allDay;
-        
-        const iso = toLocalRFC3339WithTime(info.event.start, isTimeSpecific);
-        
-        await vikunjaUpdateTaskFull(cfg, taskId, { [cfg.dateField]: iso });
+        if (isMultiSelection) {
+          // Handle multi-selection drop
+          setStatus(`Updating ${selectedEvents.size} selected tasks...`);
+          
+          // Check if the event is time-specific or all-day
+          const isTimeSpecific = !info.event.allDay;
+          const iso = toLocalRFC3339WithTime(info.event.start, isTimeSpecific);
+          
+          // Process events sequentially to avoid overwhelming the API
+          let updatedCount = 0;
+          
+          for (const eventId of selectedEvents) {
+            const event = calendar.getEventById(eventId);
+            if (!event) continue;
+            
+            const eventTaskId = event.extendedProps?.taskId;
+            if (!eventTaskId) continue;
+            
+            // Skip recurring projections
+            if (event.extendedProps?.isProjection) continue;
+            
+            try {
+              // Update the task one at a time
+              await vikunjaUpdateTaskFull(cfg, eventTaskId, { [cfg.dateField]: iso });
+              
+              // Update cache
+              const t = tasksById.get(eventTaskId);
+              if (t) t[cfg.dateField] = iso;
+              updatedCount++;
+              
+              // Small delay between requests to reduce server load
+              if (selectedEvents.size > 5) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
+            } catch (e) {
+              console.error(`Failed to update task ${eventTaskId}:`, e);
+            }
+          }
+          
+          // Clear selections after moving
+          clearEventSelection();
+          
+          // Refresh UI
+          await refreshUIFromCache(cfg);
+          
+          const timeStr = isTimeSpecific ? 
+            ` at ${info.event.start.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'})}` : '';
+          setStatus(`Updated ${updatedCount} tasks to ${info.event.start.toDateString()}${timeStr}.`);
+        } else {
+          // Handle single event drop
+          setStatus(`Updating task ${taskId}...`);
+          
+          // Check if the event is time-specific or all-day
+          const isTimeSpecific = !info.event.allDay;
+          const iso = toLocalRFC3339WithTime(info.event.start, isTimeSpecific);
+          
+          await vikunjaUpdateTaskFull(cfg, taskId, { [cfg.dateField]: iso });
 
-        // Ensure cache reflects intended field even if server echoes oddly
-        const t = tasksById.get(taskId);
-        if (t) t[cfg.dateField] = iso;
+          // Ensure cache reflects intended field even if server echoes oddly
+          const t = tasksById.get(taskId);
+          if (t) t[cfg.dateField] = iso;
+          
+          // Clear selections after moving
+          clearEventSelection();
 
-        await refreshUIFromCache(cfg);
-        
-        const timeStr = isTimeSpecific ? 
-          ` at ${info.event.start.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'})}` : '';
-        setStatus(`Updated task ${taskId} to ${info.event.start.toDateString()}${timeStr}.`);
+          await refreshUIFromCache(cfg);
+          
+          const timeStr = isTimeSpecific ? 
+            ` at ${info.event.start.toLocaleTimeString(undefined, {hour: '2-digit', minute: '2-digit'})}` : '';
+          setStatus(`Updated task ${taskId} to ${info.event.start.toDateString()}${timeStr}.`);
+        }
       } catch (e) {
         console.error(e);
         setStatus(String(e.message || e));
@@ -662,8 +988,70 @@ function ensureCalendar() {
       }
     },
 
-    eventDragStart: () => {
+    eventDragStart: (info) => {
       els.unscheduledDrop.classList.add('active');
+      
+      // If dragging an event that's not selected but there are other selected events,
+      // clear the other selections and select only this one
+      if (!selectedEvents.has(info.event.id) && selectedEvents.size > 0) {
+        console.log('Dragging unselected event while others are selected - selecting only this one');
+        clearEventSelection();
+        toggleEventSelection(info.event, false);
+      }
+      
+      console.log(`Starting drag of event ${info.event.id}`);
+      console.log(`Current selections during drag: ${Array.from(selectedEvents).join(', ')}`);
+    },
+    
+    // Add double-click handler for showing task details
+    eventDidMount: (arg) => {
+      // Make label colors visible (background + border)
+      const c = arg.event.backgroundColor || arg.event.borderColor;
+      if (c) {
+        arg.el.style.backgroundColor = c;
+        arg.el.style.borderColor = c;
+      }
+      arg.el.style.borderRadius = '10px';
+      arg.el.style.borderWidth = '1px';
+      
+      // Add data attribute for easier selection
+      arg.el.setAttribute('data-event-id', arg.event.id);
+      
+      // Special styling for recurring projections
+      if (arg.event.extendedProps?.isProjection) {
+        // Add dashed border
+        arg.el.style.borderStyle = 'dashed';
+        
+        // Add a small recurring icon
+        const titleEl = arg.el.querySelector('.fc-event-title');
+        if (titleEl) {
+          const iconSpan = document.createElement('span');
+          iconSpan.innerHTML = ' ↻';
+          iconSpan.style.fontSize = '0.85em';
+          iconSpan.title = 'Recurring event projection';
+          titleEl.appendChild(iconSpan);
+        }
+      }
+      
+      // Restore selection state if this event was previously selected
+      if (selectedEvents.has(arg.event.id)) {
+        console.log(`Event ${arg.event.id} mounted and is selected, applying styling`);
+        // Use setTimeout to ensure the element is fully in the DOM
+        setTimeout(() => {
+          updateEventSelectionStyle(arg.event, true);
+        }, 0);
+      }
+      
+      // Add double-click handler for showing task details
+      if (arg.el) {
+        arg.el.addEventListener('dblclick', () => {
+          const taskId = arg.event.extendedProps?.taskId;
+          if (taskId) {
+            console.log(`Double-clicked event ${arg.event.id}, showing task details`);
+            showTaskDetails(taskId);
+          }
+        });
+      }
     },
     eventDragStop: async (info) => {
       els.unscheduledDrop.classList.remove('active');
@@ -679,14 +1067,64 @@ function ensureCalendar() {
       if (!overDropzone) return;
 
       try {
-        setStatus(`Unscheduling task ${taskId}...`);
-        await vikunjaUpdateTaskFull(cfg, taskId, { [cfg.dateField]: null });
+        // Check if this is part of a multi-selection
+        const isMultiSelection = selectedEvents.size > 1 && selectedEvents.has(info.event.id);
+        
+        if (isMultiSelection) {
+          // Handle multi-selection unscheduling
+          setStatus(`Unscheduling ${selectedEvents.size} selected tasks...`);
+          
+          // Process events sequentially to avoid overwhelming the API
+          let updatedCount = 0;
+          
+          for (const eventId of selectedEvents) {
+            const event = calendar.getEventById(eventId);
+            if (!event) continue;
+            
+            const eventTaskId = event.extendedProps?.taskId;
+            if (!eventTaskId) continue;
+            
+            // Skip recurring projections
+            if (event.extendedProps?.isProjection) continue;
+            
+            try {
+              // Update the task one at a time
+              await vikunjaUpdateTaskFull(cfg, eventTaskId, { [cfg.dateField]: null });
+              
+              // Update cache
+              const t = tasksById.get(eventTaskId);
+              if (t) t[cfg.dateField] = null;
+              updatedCount++;
+              
+              // Small delay between requests to reduce server load
+              if (selectedEvents.size > 5) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+              }
+            } catch (e) {
+              console.error(`Failed to unschedule task ${eventTaskId}:`, e);
+            }
+          }
+          
+          // Clear selections after unscheduling
+          clearEventSelection();
+          
+          // Refresh UI
+          await refreshUIFromCache(cfg);
+          setStatus(`Unscheduled ${updatedCount} tasks.`);
+        } else {
+          // Handle single event unscheduling
+          setStatus(`Unscheduling task ${taskId}...`);
+          await vikunjaUpdateTaskFull(cfg, taskId, { [cfg.dateField]: null });
 
-        const t = tasksById.get(taskId);
-        if (t) t[cfg.dateField] = null;
+          const t = tasksById.get(taskId);
+          if (t) t[cfg.dateField] = null;
+          
+          // Clear selections after unscheduling
+          clearEventSelection();
 
-        await refreshUIFromCache(cfg);
-        setStatus(`Unscheduled task ${taskId}.`);
+          await refreshUIFromCache(cfg);
+          setStatus(`Unscheduled task ${taskId}.`);
+        }
       } catch (e) {
         console.error(e);
         setStatus(String(e.message || e));
@@ -701,8 +1139,46 @@ function ensureCalendar() {
     },
     
     eventClick: (info) => {
-      const taskId = info.event.extendedProps?.taskId;
-      if (taskId) showTaskDetails(taskId);
+      // Assign a unique ID to the event if it doesn't have one
+      if (!info.event.id) {
+        const taskId = info.event.extendedProps?.taskId;
+        if (taskId) {
+          info.event.setProp('id', `event-${taskId}`);
+        }
+      }
+      
+      console.log(`eventClick: id=${info.event.id}, ctrl=${info.jsEvent.ctrlKey}, meta=${info.jsEvent.metaKey}`);
+      console.log(`Current selections: ${Array.from(selectedEvents).join(', ')}`);
+      
+      // Check if Ctrl/Cmd key is pressed for multi-select
+      if (info.jsEvent.ctrlKey || info.jsEvent.metaKey) {
+        console.log('Using Ctrl/Cmd key for multi-select');
+        // Toggle selection with Ctrl key
+        toggleEventSelection(info.event, true);
+        return; // Exit early to prevent showing task details
+      } 
+      
+      // If clicking on an already selected event
+      if (selectedEvents.has(info.event.id)) {
+        // If this is the only selected event or there are multiple events selected
+        if (selectedEvents.size === 1) {
+          console.log('Only one event selected, showing task details');
+          // If only this event is selected, show task details
+          const taskId = info.event.extendedProps?.taskId;
+          if (taskId) showTaskDetails(taskId);
+        } else {
+          console.log('Clicking on already selected event, selecting only this one');
+          // If multiple events are selected, select only this one
+          toggleEventSelection(info.event, false);
+        }
+      } else {
+        console.log('Regular click - showing task details');
+        // Regular click - clear all selections and show task details
+        clearEventSelection();
+        
+        const taskId = info.event.extendedProps?.taskId;
+        if (taskId) showTaskDetails(taskId);
+      }
     },
   });
 
@@ -768,6 +1244,12 @@ function generateRecurringProjections(task, baseDate, cfg) {
 async function refreshUIFromCache(cfg) {
   ensureCalendar();
 
+  console.log(`Refreshing UI from cache. Current selections: ${Array.from(selectedEvents).join(', ')}`);
+  
+  // Save current selections before removing events
+  const previouslySelected = new Set(selectedEvents);
+  selectedEvents.clear();
+
   // Filter by labels and split into scheduled/unscheduled based on chosen field
   const all = Array.from(tasksById.values()).filter(t => taskMatchesLabelFilter(t, cfg));
   const scheduled = [];
@@ -791,8 +1273,12 @@ async function refreshUIFromCache(cfg) {
     // Check if this has a non-midnight time
     const hasSpecificTime = dt.getHours() !== 0 || dt.getMinutes() !== 0;
     
+    // Create a unique ID for the event
+    const eventId = `event-${t.id}`;
+    
     // Add the actual scheduled event
     calendar.addEvent({
+      id: eventId,
       title: t.title || `(task ${t.id})`,
       start: dt,
       allDay: !hasSpecificTime, // Only all-day if no specific time
@@ -801,12 +1287,38 @@ async function refreshUIFromCache(cfg) {
       extendedProps: { taskId: t.id }
     });
     
+    // Restore selection if this event was previously selected
+    if (previouslySelected.has(eventId)) {
+      selectedEvents.add(eventId);
+      // Make sure to apply the selection styling to the newly created event
+      const newEvent = calendar.getEventById(eventId);
+      if (newEvent) {
+        setTimeout(() => {
+          updateEventSelectionStyle(newEvent, true);
+          console.log(`Restored selection styling for event ${eventId}`);
+        }, 0);
+      }
+    }
+    
     // Generate and add recurring projections if applicable
     if (t.repeat_after && t.repeat_after > 0) {
       const projections = generateRecurringProjections(t, dt, cfg);
-      projections.forEach(projection => calendar.addEvent(projection));
+      projections.forEach(projection => {
+        const projEventId = `projection-${t.id}-${projection.start.getTime()}`;
+        projection.id = projEventId;
+        calendar.addEvent(projection);
+      });
     }
   }
+  
+  // Update selection count
+  updateSelectionCount();
+  
+  // Refresh all selection styles after a delay to ensure rendering is complete
+  setTimeout(() => {
+    console.log(`After UI refresh, restoring ${selectedEvents.size} selections`);
+    refreshAllSelectionStyles();
+  }, 200);
 
   // Render unscheduled list
   // Sort: label count desc, then title
@@ -1108,11 +1620,52 @@ els.dateField.addEventListener('change', async () => {
 // Dropzone highlighting for external drags (unscheduled -> calendar doesn't need this; calendar -> unscheduled handled above)
 els.unscheduledDrop.addEventListener('dragenter', () => els.unscheduledDrop.classList.add('active'));
 els.unscheduledDrop.addEventListener('dragleave', () => els.unscheduledDrop.classList.remove('active'));
+// Function to toggle selection of an unscheduled task
+function toggleUnscheduledTaskSelection(taskEl, ctrlKey = false) {
+  if (!taskEl) return;
+  
+  const taskId = Number(taskEl.getAttribute('data-task-id'));
+  if (!taskId) return;
+  
+  console.log(`Toggling unscheduled task selection: taskId=${taskId}, ctrlKey=${ctrlKey}`);
+  
+  // If not using Ctrl key and clicking on an unselected task, clear other selections
+  if (!ctrlKey) {
+    console.log('Not using Ctrl key, clearing all other selections');
+    // Remember if this task was already selected
+    const wasSelected = selectedUnscheduledTasks.has(taskId);
+    clearAllSelections();
+    // If it was already selected, we'll toggle it off in the next step
+    if (wasSelected) {
+      console.log(`Task ${taskId} was already selected, will be toggled off`);
+    }
+  }
+  
+  // Toggle selection for this task
+  if (selectedUnscheduledTasks.has(taskId)) {
+    console.log(`Removing selection for task ${taskId}`);
+    selectedUnscheduledTasks.delete(taskId);
+    taskEl.classList.remove('task-selected');
+  } else {
+    console.log(`Adding selection for task ${taskId}`);
+    selectedUnscheduledTasks.add(taskId);
+    taskEl.classList.add('task-selected');
+  }
+  
+  updateSelectionCount();
+}
+
 els.unscheduledList.addEventListener('click', (e) => {
   const taskEl = e.target.closest('.task');
   if (!taskEl) return;
-  const taskId = Number(taskEl.getAttribute('data-task-id'));
-  if (taskId) showTaskDetails(taskId);
+  
+  // Check if Ctrl/Cmd key is pressed for multi-select
+  if (e.ctrlKey || e.metaKey) {
+    toggleUnscheduledTaskSelection(taskEl, true);
+  } else {
+    const taskId = Number(taskEl.getAttribute('data-task-id'));
+    if (taskId) showTaskDetails(taskId);
+  }
 });
 // Auto-load labels and server config on page load
 window.addEventListener('DOMContentLoaded', async () => {
@@ -1182,7 +1735,7 @@ if (els.unscheduledDrop) {
   els.unscheduledDrop.style.touchAction = 'pan-y';
 }
 
-// Add CSS for recurring projections
+// Add CSS for recurring projections and selected events
 const recurringStyle = document.createElement('style');
 recurringStyle.textContent = `
   .recurring-projection {
@@ -1191,5 +1744,94 @@ recurringStyle.textContent = `
   .recurring-projection:hover {
     opacity: 1;
   }
+  
+  .event-selected {
+    box-shadow: 0 0 0 3px #ffcc00 !important;
+    position: relative;
+    transform: scale(1.05);
+    z-index: 10 !important;
+    filter: brightness(1.2);
+    outline: 2px solid #ffcc00 !important;
+  }
+  
+  .event-selected-indicator {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    background-color: #ffcc00;
+    color: #000;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    z-index: 20;
+    border: 1px solid #000;
+    pointer-events: none;
+  }
+  
+  .task-selected {
+    box-shadow: 0 0 0 3px #ffcc00 !important;
+    position: relative;
+    transform: scale(1.02);
+    z-index: 5;
+    background-color: rgba(255, 204, 0, 0.1) !important;
+    outline: 2px solid #ffcc00 !important;
+  }
 `;
 document.head.appendChild(recurringStyle);
+
+// Add event listener for the clear selection button
+if (els.clearSelectionBtn) {
+  els.clearSelectionBtn.addEventListener('click', clearEventSelection);
+}
+
+// Function to manually force refresh of all selection styles
+window.forceRefreshSelections = function() {
+  console.log("Manually forcing refresh of all selections");
+  refreshAllSelectionStyles();
+};
+
+// Add a MutationObserver to watch for changes to the calendar and refresh selections
+const calendarEl = document.getElementById('calendar');
+if (calendarEl) {
+  const observer = new MutationObserver((mutations) => {
+    if (selectedEvents.size > 0) {
+      // Only refresh if we detect relevant changes (new nodes added)
+      const hasRelevantChanges = mutations.some(mutation => 
+        mutation.type === 'childList' && mutation.addedNodes.length > 0);
+      
+      if (hasRelevantChanges) {
+        console.log("Calendar DOM changed, refreshing selections");
+        refreshAllSelectionStyles();
+      }
+    }
+  });
+  
+  observer.observe(calendarEl, { 
+    childList: true,
+    subtree: true,
+    attributes: false,
+    characterData: false
+  });
+}
+
+// Add event listeners to the calendar container to handle view changes
+// which often cause events to be rerendered
+if (calendarEl) {
+  calendarEl.addEventListener('viewDidMount', () => {
+    console.log("Calendar view changed, refreshing selections");
+    if (selectedEvents.size > 0) {
+      setTimeout(refreshAllSelectionStyles, 100);
+    }
+  });
+}
+
+// Add a global function to force selection refresh from the console
+window.applySelections = function() {
+  console.log("Manually applying selections to all events");
+  refreshAllSelectionStyles();
+};
