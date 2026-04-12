@@ -6,3 +6,10 @@ services:
       - "8080:3000"
     env_file:
       - .env
+    environment:
+      - DB_PATH=/data
+    volumes:
+      - db-data:/data
+volumes:
+  db-data:
+    # This creates a named volume for persistent database storage

@@ -10,7 +10,9 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Setup lowdb
-const dbFile = path.join(__dirname, 'db.json');
+// Use a path that will map to the Docker volume
+const dbFile = path.join(process.env.DB_PATH || __dirname, 'db.json');
+console.log(`Using database file at: ${dbFile}`);
 const adapter = new JSONFile(dbFile);
 const db = new Low(adapter, { dayColors: {} }); // Provide default data structure
 
