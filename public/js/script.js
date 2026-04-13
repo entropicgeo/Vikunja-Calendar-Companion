@@ -891,9 +891,9 @@ function ensureCalendar() {
       minute: '2-digit',
       hour12: true
     },
-    // Default time range for day/week views
-    slotMinTime: '06:00:00',
-    slotMaxTime: '22:00:00',
+    // Show full 24-hour range for day/week views
+    slotMinTime: '00:00:00',
+    slotMaxTime: '24:00:00',
     
     // Custom event rendering for recurring projections
     eventDidMount: (arg) => {
