@@ -27,6 +27,7 @@ const els = {
   projectionWeeks: document.getElementById('projectionWeeks'),
   clearSelectionBtn: document.getElementById('clearSelectionBtn'),
   selectedCount: document.getElementById('selectedCount'),
+  markDoneArea: document.getElementById('markDoneArea'),
 };
 els.labelsPicker.innerHTML = '<div class="small">Press “Load labels” to populate.</div>';
 
@@ -640,6 +641,51 @@ async function markTaskAsDone(taskId) {
   }
 }
 
+// Function to mark multiple tasks as done
+async function markMultipleTasksAsDone(taskIds) {
+  const cfg = config();
+  const totalTasks = taskIds.length;
+  
+  setStatus(`Marking ${totalTasks} tasks as done...`);
+  
+  let successCount = 0;
+  let failCount = 0;
+  
+  // Process tasks sequentially to avoid overwhelming the API
+  for (const taskId of taskIds) {
+    try {
+      // Update the task with done=true
+      await vikunjaUpdateTaskFull(cfg, taskId, { done: true });
+      
+      // Remove the task from our local cache
+      tasksById.delete(taskId);
+      
+      successCount++;
+      setStatus(`Progress: ${successCount}/${totalTasks} tasks marked as done...`);
+      
+      // Small delay between requests to reduce server load
+      if (totalTasks > 5) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    } catch (e) {
+      console.error(`Failed to mark task ${taskId} as done:`, e);
+      failCount++;
+    }
+  }
+  
+  if (failCount === 0) {
+    setStatus(`Successfully marked ${successCount} tasks as done.`);
+  } else {
+    setStatus(`Marked ${successCount} tasks as done. Failed to mark ${failCount} tasks.`);
+  }
+  
+  // Clear selections after marking as done
+  clearAllSelections();
+  
+  // Refresh UI to reflect changes
+  await refreshUIFromCache(cfg);
+}
+
 function mergeTaskPreserveLabels(oldTask, updatedTask) {
   if (!oldTask) return updatedTask || null;
   if (!updatedTask) return oldTask;
@@ -1104,6 +1150,7 @@ function ensureCalendar() {
 
     eventDragStart: (info) => {
       els.unscheduledDrop.classList.add('active');
+      els.markDoneArea.classList.add('active');
       
       // If dragging an event that's not selected but there are other selected events,
       // clear the other selections and select only this one
@@ -1169,6 +1216,7 @@ function ensureCalendar() {
     },
     eventDragStop: async (info) => {
       els.unscheduledDrop.classList.remove('active');
+      els.markDoneArea.classList.remove('active');
 
       // If dropped over the unscheduled dropzone, clear the date field.
       const cfg = config();
@@ -1177,6 +1225,46 @@ function ensureCalendar() {
 
       const { clientX, clientY } = info.jsEvent;
       const target = document.elementFromPoint(clientX, clientY);
+      
+      // Check if dropped over the mark done area
+      const overMarkDoneArea = target && target.closest('#markDoneArea');
+      if (overMarkDoneArea) {
+        // Check if this is part of a multi-selection
+        const isMultiSelection = selectedEvents.size > 1 && selectedEvents.has(info.event.id);
+        
+        if (isMultiSelection) {
+          // Get all selected task IDs
+          const selectedTaskIds = [];
+          for (const eventId of selectedEvents) {
+            const event = calendar.getEventById(eventId);
+            if (!event) continue;
+            
+            const eventTaskId = event.extendedProps?.taskId;
+            if (!eventTaskId) continue;
+            
+            // Skip recurring projections
+            if (event.extendedProps?.isProjection) continue;
+            
+            selectedTaskIds.push(eventTaskId);
+          }
+          
+          // Mark all selected tasks as done
+          if (selectedTaskIds.length > 0) {
+            await markMultipleTasksAsDone(selectedTaskIds);
+          }
+        } else {
+          // Mark single task as done
+          try {
+            await markTaskAsDone(taskId);
+            await refreshUIFromCache(cfg);
+          } catch (e) {
+            console.error(e);
+            setStatus(String(e.message || e));
+          }
+        }
+        return;
+      }
+      
       const overDropzone = target && target.closest('#unscheduledDrop');
       if (!overDropzone) return;
 
@@ -1793,6 +1881,10 @@ els.dateField.addEventListener('change', async () => {
 // Dropzone highlighting for external drags (unscheduled -> calendar doesn't need this; calendar -> unscheduled handled above)
 els.unscheduledDrop.addEventListener('dragenter', () => els.unscheduledDrop.classList.add('active'));
 els.unscheduledDrop.addEventListener('dragleave', () => els.unscheduledDrop.classList.remove('active'));
+
+// Mark Done Area highlighting
+els.markDoneArea.addEventListener('dragenter', () => els.markDoneArea.classList.add('active'));
+els.markDoneArea.addEventListener('dragleave', () => els.markDoneArea.classList.remove('active'));
 // Function to toggle selection of an unscheduled task
 function toggleUnscheduledTaskSelection(taskEl, ctrlKey = false) {
   if (!taskEl) return;
@@ -2056,6 +2148,47 @@ recurringStyle.textContent = `
   /* Day color styles */
   .day-selected {
     box-shadow: inset 0 0 0 2px #ffcc00 !important;
+  }
+  
+  /* Mark Done Area styles */
+  .mark-done-area {
+    width: 120px;
+    border: 2px dashed #4caf50;
+    border-radius: 8px;
+    background-color: rgba(76, 175, 80, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    opacity: 0.7;
+  }
+  
+  .mark-done-area.active {
+    background-color: rgba(76, 175, 80, 0.3);
+    border-style: solid;
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  
+  .mark-done-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 15px;
+  }
+  
+  .mark-done-icon {
+    font-size: 24px;
+    color: #4caf50;
+    margin-bottom: 10px;
+  }
+  
+  .mark-done-text {
+    color: #4caf50;
+    font-size: 12px;
+    font-weight: bold;
   }
   
   .color-btn {

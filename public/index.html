@@ -127,7 +127,15 @@
     </aside>
 
     <main class="right">
-      <div id="calendar"></div>
+      <div style="display: flex; gap: 10px;">
+        <div id="calendar" style="flex: 1;"></div>
+        <div id="markDoneArea" class="mark-done-area">
+          <div class="mark-done-content">
+            <div class="mark-done-icon">✓</div>
+            <div class="mark-done-text">Drop here to mark selected tasks as done</div>
+          </div>
+        </div>
+      </div>
       <div class="day-color-picker" style="margin-top: 10px; padding: 10px; border: 1px solid #2a3140; border-radius: 8px; background: rgba(255,255,255,0.02);">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
           <span style="font-size: 14px; font-weight: bold;">Day Color</span>
@@ -175,7 +183,8 @@
       <div class="calendar-help" style="margin-top: 10px; font-size: 12px; color: #aab4c5; text-align: center;">
         <p>Hold Ctrl/Cmd while clicking events or unscheduled tasks to select multiple items for group operations. <br>
            <span style="color: #ffcc00;">Ctrl+click toggles selection. Click an item to view details.</span> <br>
-           Drag any selected item to move all selected items. Selections are cleared after moving. Press Esc to manually clear selection.</p>
+           Drag any selected item to move all selected items. Selections are cleared after moving. Press Esc to manually clear selection.<br>
+           <span style="color: #4caf50;">Drag selected tasks to the green area to mark them as done.</span></p>
       </div>
     </main>
   </div>
