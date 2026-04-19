@@ -682,8 +682,8 @@ async function markMultipleTasksAsDone(taskIds) {
   // Clear selections after marking as done
   clearAllSelections();
   
-  // Refresh UI to reflect changes
-  await refreshUIFromCache(cfg);
+  // Reload all tasks instead of just refreshing UI from cache
+  await loadEverything();
 }
 
 function mergeTaskPreserveLabels(oldTask, updatedTask) {
@@ -1256,7 +1256,7 @@ function ensureCalendar() {
           // Mark single task as done
           try {
             await markTaskAsDone(taskId);
-            await refreshUIFromCache(cfg);
+            await loadEverything(); // Reload all tasks instead of just refreshing UI
           } catch (e) {
             console.error(e);
             setStatus(String(e.message || e));
