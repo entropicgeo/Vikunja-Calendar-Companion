@@ -1014,6 +1014,17 @@ function ensureCalendar() {
           updateEventSelectionStyle(arg.event, true);
         }, 0);
       }
+      
+      // Add double-click handler for showing task details
+      if (arg.el) {
+        arg.el.addEventListener('dblclick', () => {
+          const taskId = arg.event.extendedProps?.taskId;
+          if (taskId) {
+            console.log(`Double-clicked event ${arg.event.id}, showing task details`);
+            showTaskDetails(taskId);
+          }
+        });
+      }
     },
 
     drop: async (info) => {
@@ -1199,56 +1210,6 @@ function ensureCalendar() {
       console.log(`Current selections during drag: ${Array.from(selectedEvents).join(', ')}`);
     },
     
-    // Add double-click handler for showing task details
-    eventDidMount: (arg) => {
-      // Make label colors visible (background + border)
-      const c = arg.event.backgroundColor || arg.event.borderColor;
-      if (c) {
-        arg.el.style.backgroundColor = c;
-        arg.el.style.borderColor = c;
-      }
-      arg.el.style.borderRadius = '10px';
-      arg.el.style.borderWidth = '1px';
-      
-      // Add data attribute for easier selection
-      arg.el.setAttribute('data-event-id', arg.event.id);
-      
-      // Special styling for recurring projections
-      if (arg.event.extendedProps?.isProjection) {
-        // Add dashed border
-        arg.el.style.borderStyle = 'dashed';
-        
-        // Add a small recurring icon
-        const titleEl = arg.el.querySelector('.fc-event-title');
-        if (titleEl) {
-          const iconSpan = document.createElement('span');
-          iconSpan.innerHTML = ' ↻';
-          iconSpan.style.fontSize = '0.85em';
-          iconSpan.title = 'Recurring event projection';
-          titleEl.appendChild(iconSpan);
-        }
-      }
-      
-      // Restore selection state if this event was previously selected
-      if (selectedEvents.has(arg.event.id)) {
-        console.log(`Event ${arg.event.id} mounted and is selected, applying styling`);
-        // Use setTimeout to ensure the element is fully in the DOM
-        setTimeout(() => {
-          updateEventSelectionStyle(arg.event, true);
-        }, 0);
-      }
-      
-      // Add double-click handler for showing task details
-      if (arg.el) {
-        arg.el.addEventListener('dblclick', () => {
-          const taskId = arg.event.extendedProps?.taskId;
-          if (taskId) {
-            console.log(`Double-clicked event ${arg.event.id}, showing task details`);
-            showTaskDetails(taskId);
-          }
-        });
-      }
-    },
     eventDragStop: async (info) => {
       els.unscheduledDrop.classList.remove('active');
       els.markDoneArea.classList.remove('active');
