@@ -1,0 +1,1284 @@
+// Task Packs Application
+class TaskPacksApp {
+    constructor() {
+        this.db = null;
+        this.config = {
+            taskPacksProjectId: null,
+            defaultDurationMinutes: 45,
+            breakNotificationsEnabled: true
+        };
+        this.currentDate = new Date().toISOString().split('T')[0];
+        this.activeSession = null;
+        this.timer = null;
+        this.timerStartTime = null;
+        this.timerElapsed = 0;
+        this.timerPaused = false;
+        
+        this.elements = {
+            packDate: document.getElementById('pack-date'),
+            todayBtn: document.getElementById('today-btn'),
+            statusBar: document.getElementById('status-bar'),
+            tabBtns: document.querySelectorAll('.tab-btn'),
+            tabContents: document.querySelectorAll('.tab-content'),
+            
+            // Active pack panel
+            activePackPanel: document.getElementById('active-pack-panel'),
+            activePackTitle: document.getElementById('active-pack-title'),
+            activePackMeta: document.getElementById('active-pack-meta'),
+            timerDisplay: document.getElementById('timer-display'),
+            timerStatus: document.getElementById('timer-status'),
+            breakInfo: document.getElementById('break-info'),
+            pauseBtn: document.getElementById('pause-btn'),
+            resumeBtn: document.getElementById('resume-btn'),
+            stopBtn: document.getElementById('stop-btn'),
+            breakNowBtn: document.getElementById('break-now-btn'),
+            
+            // Packs list
+            packsList: document.getElementById('packs-list'),
+            
+            // Create pack form
+            createPackForm: document.getElementById('create-pack-form'),
+            packTitle: document.getElementById('pack-title'),
+            packDescription: document.getElementById('pack-description'),
+            taskFilter: document.getElementById('task-filter'),
+            projectFilter: document.getElementById('project-filter'),
+            availableTasks: document.getElementById('available-tasks'),
+            activityContext: document.getElementById('activity-context'),
+            breakStrategies: document.getElementById('break-strategies'),
+            clearFormBtn: document.getElementById('clear-form-btn'),
+            
+            // Config
+            taskPacksProject: document.getElementById('task-packs-project'),
+            defaultDuration: document.getElementById('default-duration'),
+            breakNotifications: document.getElementById('break-notifications'),
+            saveConfigBtn: document.getElementById('save-config-btn'),
+            
+            // Context management
+            addContextBtn: document.getElementById('add-context-btn'),
+            contextsList: document.getElementById('contexts-list'),
+            contextModal: document.getElementById('context-modal'),
+            contextForm: document.getElementById('context-form'),
+            contextModalClose: document.getElementById('context-modal-close'),
+            contextCancel: document.getElementById('context-cancel'),
+            
+            // Strategy management
+            addStrategyBtn: document.getElementById('add-strategy-btn'),
+            strategiesList: document.getElementById('strategies-list'),
+            strategyModal: document.getElementById('strategy-modal'),
+            strategyForm: document.getElementById('strategy-form'),
+            strategyModalClose: document.getElementById('strategy-modal-close'),
+            strategyCancel: document.getElementById('strategy-cancel'),
+            
+            // Rating modal
+            ratingModal: document.getElementById('rating-modal'),
+            ratingForm: document.getElementById('rating-form'),
+            ratingModalClose: document.getElementById('rating-modal-close'),
+            ratingCancel: document.getElementById('rating-cancel')
+        };
+        
+        this.allTasks = [];
+        this.allProjects = [];
+        this.contexts = [];
+        this.strategies = [];
+        this.packs = [];
+        this.sessions = [];
+        
+        this.init();
+    }
+    
+    async init() {
+        try {
+            await this.initDatabase();
+            await this.loadConfig();
+            await this.seedDefaultData();
+            this.setupEventListeners();
+            this.elements.packDate.value = this.currentDate;
+            await this.loadAllData();
+            this.setStatus('Task Packs loaded successfully');
+        } catch (error) {
+            console.error('Failed to initialize Task Packs:', error);
+            this.setStatus('Failed to initialize Task Packs', 'error');
+        }
+    }
+    
+    async initDatabase() {
+        try {
+            const response = await fetch('/api/db');
+            if (response.ok) {
+                this.db = await response.json();
+            } else {
+                this.db = {};
+            }
+        } catch (error) {
+            console.error('Failed to load database:', error);
+            this.db = {};
+        }
+        
+        // Ensure required collections exist
+        if (!this.db.taskPacks) this.db.taskPacks = [];
+        if (!this.db.activitySessions) this.db.activitySessions = [];
+        if (!this.db.activityContexts) this.db.activityContexts = [];
+        if (!this.db.breakStrategies) this.db.breakStrategies = [];
+        if (!this.db.breakEvents) this.db.breakEvents = [];
+        if (!this.db.strategyRatings) this.db.strategyRatings = [];
+        if (!this.db.taskPacksConfig) this.db.taskPacksConfig = {};
+    }
+    
+    async saveDatabase() {
+        try {
+            const response = await fetch('/api/db', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(this.db)
+            });
+            if (!response.ok) {
+                throw new Error('Failed to save database');
+            }
+        } catch (error) {
+            console.error('Failed to save database:', error);
+            this.setStatus('Failed to save data', 'error');
+        }
+    }
+    
+    async loadConfig() {
+        if (this.db.taskPacksConfig) {
+            this.config = { ...this.config, ...this.db.taskPacksConfig };
+        }
+        
+        // Update UI
+        if (this.elements.taskPacksProject) {
+            this.elements.taskPacksProject.value = this.config.taskPacksProjectId || '';
+        }
+        if (this.elements.defaultDuration) {
+            this.elements.defaultDuration.value = this.config.defaultDurationMinutes || 45;
+        }
+        if (this.elements.breakNotifications) {
+            this.elements.breakNotifications.checked = this.config.breakNotificationsEnabled !== false;
+        }
+    }
+    
+    async saveConfig() {
+        this.config.taskPacksProjectId = parseInt(this.elements.taskPacksProject.value) || null;
+        this.config.defaultDurationMinutes = parseInt(this.elements.defaultDuration.value) || 45;
+        this.config.breakNotificationsEnabled = this.elements.breakNotifications.checked;
+        
+        this.db.taskPacksConfig = this.config;
+        await this.saveDatabase();
+        this.setStatus('Configuration saved');
+    }
+    
+    async seedDefaultData() {
+        // Seed default activity contexts if none exist
+        if (this.db.activityContexts.length === 0) {
+            const defaultContexts = [
+                {
+                    id: 'computer_main_desk',
+                    name: 'Computer work / main desk',
+                    description: 'Working at the main computer desk',
+                    activityType: 'computer_work',
+                    active: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'computer_couch_laptop',
+                    name: 'Computer work / couch laptop',
+                    description: 'Working on laptop while on couch',
+                    activityType: 'computer_work',
+                    active: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'driving',
+                    name: 'Driving',
+                    description: 'Driving or being in a vehicle',
+                    activityType: 'driving',
+                    active: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'standing_kitchen',
+                    name: 'Standing kitchen work',
+                    description: 'Standing work in the kitchen',
+                    activityType: 'standing',
+                    active: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                }
+            ];
+            this.db.activityContexts = defaultContexts;
+        }
+        
+        // Seed default break strategies if none exist
+        if (this.db.breakStrategies.length === 0) {
+            const defaultStrategies = [
+                {
+                    id: 'scalene_jaw_tongue',
+                    name: 'Scalene / jaw / tongue microbreak',
+                    description: 'Check and release tension in neck, jaw, and tongue',
+                    breakType: 'microbreak',
+                    suggestedDurationSeconds: 90,
+                    intervalMinutes: 20,
+                    prompt: 'Pause. Let the jaw and tongue soften. Notice whether the sides/front of the neck are gripping. Do not force a stretch. Let the breath move gently.',
+                    active: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'inner_thigh_adductor',
+                    name: 'Inner thigh / adductor release',
+                    description: 'Release tension in inner thighs and pelvic floor',
+                    breakType: 'microbreak',
+                    suggestedDurationSeconds: 120,
+                    intervalMinutes: 30,
+                    prompt: 'Check whether the inner thighs are gripping. Let knees, hips, belly, and pelvic floor soften without collapsing posture. Shift position slightly.',
+                    active: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                },
+                {
+                    id: 'standing_shift',
+                    name: 'Standing shift reset',
+                    description: 'Stand up and shift weight',
+                    breakType: 'microbreak',
+                    suggestedDurationSeconds: 60,
+                    intervalMinutes: 25,
+                    prompt: 'Stand up and shift your weight from foot to foot. Notice your posture without forcing corrections.',
+                    active: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                }
+            ];
+            this.db.breakStrategies = defaultStrategies;
+        }
+        
+        await this.saveDatabase();
+    }
+    
+    setupEventListeners() {
+        // Date selection
+        this.elements.packDate.addEventListener('change', () => {
+            this.currentDate = this.elements.packDate.value;
+            this.loadPacksForDate();
+        });
+        
+        this.elements.todayBtn.addEventListener('click', () => {
+            this.currentDate = new Date().toISOString().split('T')[0];
+            this.elements.packDate.value = this.currentDate;
+            this.loadPacksForDate();
+        });
+        
+        // Tab navigation
+        this.elements.tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tabName = btn.dataset.tab;
+                this.switchTab(tabName);
+            });
+        });
+        
+        // Active pack controls
+        this.elements.pauseBtn.addEventListener('click', () => this.pauseSession());
+        this.elements.resumeBtn.addEventListener('click', () => this.resumeSession());
+        this.elements.stopBtn.addEventListener('click', () => this.stopSession());
+        this.elements.breakNowBtn.addEventListener('click', () => this.startBreak());
+        
+        // Create pack form
+        this.elements.createPackForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.createPack();
+        });
+        
+        this.elements.clearFormBtn.addEventListener('click', () => this.clearCreateForm());
+        
+        this.elements.taskFilter.addEventListener('input', () => this.filterTasks());
+        this.elements.projectFilter.addEventListener('change', () => this.filterTasks());
+        
+        // Config
+        this.elements.saveConfigBtn.addEventListener('click', () => this.saveConfig());
+        
+        // Context management
+        this.elements.addContextBtn.addEventListener('click', () => this.showContextModal());
+        this.elements.contextModalClose.addEventListener('click', () => this.hideContextModal());
+        this.elements.contextCancel.addEventListener('click', () => this.hideContextModal());
+        this.elements.contextForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveContext();
+        });
+        
+        // Strategy management
+        this.elements.addStrategyBtn.addEventListener('click', () => this.showStrategyModal());
+        this.elements.strategyModalClose.addEventListener('click', () => this.hideStrategyModal());
+        this.elements.strategyCancel.addEventListener('click', () => this.hideStrategyModal());
+        this.elements.strategyForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveStrategy();
+        });
+        
+        // Rating modal
+        this.elements.ratingModalClose.addEventListener('click', () => this.hideRatingModal());
+        this.elements.ratingCancel.addEventListener('click', () => this.hideRatingModal());
+        this.elements.ratingForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveRating();
+        });
+        
+        // Modal backdrop clicks
+        [this.elements.contextModal, this.elements.strategyModal, this.elements.ratingModal].forEach(modal => {
+            if (modal) {
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        modal.classList.remove('show');
+                    }
+                });
+            }
+        });
+    }
+    
+    switchTab(tabName) {
+        // Update tab buttons
+        this.elements.tabBtns.forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.tab === tabName);
+        });
+        
+        // Update tab content
+        this.elements.tabContents.forEach(content => {
+            content.classList.toggle('active', content.id === `${tabName}-tab`);
+        });
+        
+        // Load data for specific tabs
+        if (tabName === 'create') {
+            this.loadCreatePackData();
+        } else if (tabName === 'contexts') {
+            this.renderContexts();
+        } else if (tabName === 'strategies') {
+            this.renderStrategies();
+        }
+    }
+    
+    async loadAllData() {
+        try {
+            this.setStatus('Loading data...');
+            
+            // Load tasks and projects from Vikunja
+            await this.loadTasks();
+            await this.loadProjects();
+            
+            // Load local data
+            this.contexts = this.db.activityContexts || [];
+            this.strategies = this.db.breakStrategies || [];
+            this.packs = this.db.taskPacks || [];
+            this.sessions = this.db.activitySessions || [];
+            
+            // Load packs for current date
+            await this.loadPacksForDate();
+            
+            this.setStatus('Data loaded successfully');
+        } catch (error) {
+            console.error('Failed to load data:', error);
+            this.setStatus('Failed to load data', 'error');
+        }
+    }
+    
+    async loadTasks() {
+        try {
+            const tasks = [];
+            const perPage = 50;
+            let page = 1;
+            
+            while (true) {
+                const url = new URL('/api/tasks', window.location.origin);
+                url.searchParams.set('page', String(page));
+                url.searchParams.set('per_page', String(perPage));
+                url.searchParams.set('filter', 'done=false');
+                
+                const response = await fetch(url.toString());
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch tasks: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (!Array.isArray(data) || data.length === 0) break;
+                
+                tasks.push(...data);
+                if (data.length < perPage) break;
+                page++;
+            }
+            
+            this.allTasks = tasks;
+        } catch (error) {
+            console.error('Failed to load tasks:', error);
+            throw error;
+        }
+    }
+    
+    async loadProjects() {
+        try {
+            const response = await fetch('/api/projects');
+            if (response.ok) {
+                this.allProjects = await response.json();
+            }
+        } catch (error) {
+            console.error('Failed to load projects:', error);
+            // Continue without projects if they can't be loaded
+        }
+    }
+    
+    async loadPacksForDate() {
+        // Filter packs for the current date
+        const dateStr = this.currentDate;
+        const packsForDate = this.packs.filter(pack => {
+            return pack.date === dateStr;
+        });
+        
+        this.renderPacksList(packsForDate);
+        
+        // Check for active session
+        const activeSession = this.sessions.find(session => 
+            session.status === 'running' || session.status === 'paused'
+        );
+        
+        if (activeSession) {
+            this.activeSession = activeSession;
+            this.showActivePackPanel();
+            if (activeSession.status === 'running') {
+                this.startTimer();
+            }
+        } else {
+            this.hideActivePackPanel();
+        }
+    }
+    
+    renderPacksList(packs) {
+        if (packs.length === 0) {
+            this.elements.packsList.innerHTML = '<div class="loading">No packs for this date</div>';
+            return;
+        }
+        
+        this.elements.packsList.innerHTML = packs.map(pack => {
+            const tasks = pack.subtaskIds.map(id => 
+                this.allTasks.find(t => t.id === id)
+            ).filter(Boolean);
+            
+            const context = this.contexts.find(c => c.id === pack.activityContextId);
+            const strategies = pack.breakStrategyIds.map(id =>
+                this.strategies.find(s => s.id === id)
+            ).filter(Boolean);
+            
+            return `
+                <div class="pack-item">
+                    <div class="pack-item-header">
+                        <div>
+                            <div class="pack-item-title">${this.escapeHtml(pack.title)}</div>
+                            <div class="pack-item-meta">
+                                ${context ? context.name : 'No context'} • 
+                                ${strategies.length} strategies • 
+                                ${tasks.length} tasks
+                            </div>
+                        </div>
+                        <div class="pack-item-status ${pack.status}">${pack.status}</div>
+                    </div>
+                    
+                    <div class="pack-item-tasks">
+                        ${tasks.slice(0, 3).map(task => 
+                            `<div class="pack-item-task">• ${this.escapeHtml(task.title || `Task ${task.id}`)}</div>`
+                        ).join('')}
+                        ${tasks.length > 3 ? `<div class="pack-item-task">... and ${tasks.length - 3} more</div>` : ''}
+                    </div>
+                    
+                    <div class="pack-item-actions">
+                        ${pack.status === 'idle' ? `<button class="btn btn-primary btn-sm" onclick="taskPacksApp.startPack('${pack.id}')">Start</button>` : ''}
+                        ${pack.status === 'paused' ? `<button class="btn btn-primary btn-sm" onclick="taskPacksApp.resumePack('${pack.id}')">Resume</button>` : ''}
+                        <button class="btn btn-secondary btn-sm" onclick="taskPacksApp.editPack('${pack.id}')">Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="taskPacksApp.deletePack('${pack.id}')">Delete</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    async loadCreatePackData() {
+        // Populate project filter
+        this.elements.projectFilter.innerHTML = '<option value="">All projects</option>';
+        this.allProjects.forEach(project => {
+            const option = document.createElement('option');
+            option.value = project.id;
+            option.textContent = project.title || `Project ${project.id}`;
+            this.elements.projectFilter.appendChild(option);
+        });
+        
+        // Populate activity context
+        this.elements.activityContext.innerHTML = '<option value="">Select context...</option>';
+        this.contexts.filter(c => c.active).forEach(context => {
+            const option = document.createElement('option');
+            option.value = context.id;
+            option.textContent = context.name;
+            this.elements.activityContext.appendChild(option);
+        });
+        
+        // Render break strategies
+        this.renderBreakStrategiesForCreate();
+        
+        // Filter and render tasks
+        this.filterTasks();
+    }
+    
+    filterTasks() {
+        const filterText = this.elements.taskFilter.value.toLowerCase();
+        const projectId = this.elements.projectFilter.value ? parseInt(this.elements.projectFilter.value) : null;
+        
+        let filtered = [...this.allTasks];
+        
+        // Filter by text
+        if (filterText) {
+            filtered = filtered.filter(task => 
+                (task.title || '').toLowerCase().includes(filterText)
+            );
+        }
+        
+        // Filter by project
+        if (projectId) {
+            filtered = filtered.filter(task => task.project_id === projectId);
+        }
+        
+        // Sort by title
+        filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+        
+        this.renderTasksForCreate(filtered);
+    }
+    
+    renderTasksForCreate(tasks) {
+        this.elements.availableTasks.innerHTML = tasks.map(task => `
+            <div class="task-item" data-task-id="${task.id}">
+                <input type="checkbox" class="task-checkbox" value="${task.id}">
+                <div class="task-item-title">${this.escapeHtml(task.title || `Task ${task.id}`)}</div>
+                <div class="task-item-meta">Project: ${task.project_id || 'None'}</div>
+            </div>
+        `).join('');
+        
+        // Add click handlers
+        this.elements.availableTasks.querySelectorAll('.task-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (e.target.type !== 'checkbox') {
+                    const checkbox = item.querySelector('.task-checkbox');
+                    checkbox.checked = !checkbox.checked;
+                }
+                item.classList.toggle('selected', item.querySelector('.task-checkbox').checked);
+            });
+        });
+    }
+    
+    renderBreakStrategiesForCreate() {
+        this.elements.breakStrategies.innerHTML = this.strategies.filter(s => s.active).map(strategy => `
+            <div class="strategy-item" data-strategy-id="${strategy.id}">
+                <input type="checkbox" class="strategy-checkbox" value="${strategy.id}">
+                <div class="strategy-item-info">
+                    <div class="strategy-item-name">${this.escapeHtml(strategy.name)}</div>
+                    <div class="strategy-item-meta">
+                        ${strategy.breakType} • Every ${strategy.intervalMinutes}min • ${strategy.suggestedDurationSeconds}s
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        
+        // Add click handlers
+        this.elements.breakStrategies.querySelectorAll('.strategy-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (e.target.type !== 'checkbox') {
+                    const checkbox = item.querySelector('.strategy-checkbox');
+                    checkbox.checked = !checkbox.checked;
+                }
+                item.classList.toggle('selected', item.querySelector('.strategy-checkbox').checked);
+            });
+        });
+    }
+    
+    async createPack() {
+        try {
+            if (!this.config.taskPacksProjectId) {
+                this.setStatus('Please configure Task Packs project ID first', 'error');
+                this.switchTab('config');
+                return;
+            }
+            
+            const title = this.elements.packTitle.value.trim();
+            const description = this.elements.packDescription.value.trim();
+            
+            if (!title) {
+                this.setStatus('Please enter a pack title', 'error');
+                return;
+            }
+            
+            // Get selected tasks
+            const selectedTasks = Array.from(this.elements.availableTasks.querySelectorAll('.task-checkbox:checked'))
+                .map(cb => parseInt(cb.value));
+            
+            if (selectedTasks.length === 0) {
+                this.setStatus('Please select at least one task', 'error');
+                return;
+            }
+            
+            // Get selected context and strategies
+            const activityContextId = this.elements.activityContext.value;
+            const selectedStrategies = Array.from(this.elements.breakStrategies.querySelectorAll('.strategy-checkbox:checked'))
+                .map(cb => cb.value);
+            
+            this.setStatus('Creating pack...');
+            
+            // Create parent task in Vikunja
+            const parentTask = await this.createVikunjaParentTask(title, description);
+            
+            // Assign subtasks
+            await this.assignSubtasks(parentTask.id, selectedTasks);
+            
+            // Create local pack record
+            const pack = {
+                id: this.generateId(),
+                vikunjaParentTaskId: parentTask.id,
+                vikunjaProjectId: this.config.taskPacksProjectId,
+                title,
+                description,
+                date: this.currentDate,
+                subtaskIds: selectedTasks,
+                activityContextId,
+                breakStrategyIds: selectedStrategies,
+                status: 'idle',
+                syncStatus: 'synced',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            this.db.taskPacks.push(pack);
+            await this.saveDatabase();
+            
+            this.packs = this.db.taskPacks;
+            this.clearCreateForm();
+            this.loadPacksForDate();
+            this.switchTab('packs');
+            
+            this.setStatus('Pack created successfully');
+        } catch (error) {
+            console.error('Failed to create pack:', error);
+            this.setStatus(`Failed to create pack: ${error.message}`, 'error');
+        }
+    }
+    
+    async createVikunjaParentTask(title, description) {
+        const taskData = {
+            title,
+            description: description || `Task Pack created on ${this.currentDate}`,
+            project_id: this.config.taskPacksProjectId
+        };
+        
+        const response = await fetch('/api/tasks', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(taskData)
+        });
+        
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Failed to create parent task: ${error}`);
+        }
+        
+        return await response.json();
+    }
+    
+    async assignSubtasks(parentTaskId, subtaskIds) {
+        for (const subtaskId of subtaskIds) {
+            try {
+                const relationPayload = {
+                    task_id: parentTaskId,
+                    relation_kind: "subtask",
+                    other_task_id: subtaskId
+                };
+                
+                const response = await fetch(`/api/tasks/${subtaskId}/relations`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(relationPayload)
+                });
+                
+                if (!response.ok) {
+                    console.error(`Failed to assign subtask ${subtaskId}`);
+                }
+            } catch (error) {
+                console.error(`Error assigning subtask ${subtaskId}:`, error);
+            }
+        }
+    }
+    
+    clearCreateForm() {
+        this.elements.packTitle.value = '';
+        this.elements.packDescription.value = '';
+        this.elements.taskFilter.value = '';
+        this.elements.projectFilter.value = '';
+        this.elements.activityContext.value = '';
+        
+        // Clear task selections
+        this.elements.availableTasks.querySelectorAll('.task-checkbox').forEach(cb => {
+            cb.checked = false;
+        });
+        this.elements.availableTasks.querySelectorAll('.task-item').forEach(item => {
+            item.classList.remove('selected');
+        });
+        
+        // Clear strategy selections
+        this.elements.breakStrategies.querySelectorAll('.strategy-checkbox').forEach(cb => {
+            cb.checked = false;
+        });
+        this.elements.breakStrategies.querySelectorAll('.strategy-item').forEach(item => {
+            item.classList.remove('selected');
+        });
+    }
+    
+    async startPack(packId) {
+        try {
+            const pack = this.packs.find(p => p.id === packId);
+            if (!pack) return;
+            
+            // Create activity session
+            const session = {
+                id: this.generateId(),
+                taskPackId: packId,
+                vikunjaParentTaskId: pack.vikunjaParentTaskId,
+                startedAt: new Date().toISOString(),
+                status: 'running',
+                activityContextId: pack.activityContextId,
+                breakStrategyIds: pack.breakStrategyIds,
+                totalElapsedSeconds: 0,
+                activeElapsedSeconds: 0,
+                pausedIntervals: []
+            };
+            
+            this.db.activitySessions.push(session);
+            
+            // Update pack status
+            pack.status = 'running';
+            pack.updatedAt = new Date().toISOString();
+            
+            await this.saveDatabase();
+            
+            this.activeSession = session;
+            this.sessions = this.db.activitySessions;
+            
+            this.showActivePackPanel();
+            this.startTimer();
+            this.loadPacksForDate();
+            
+            this.setStatus('Pack started');
+        } catch (error) {
+            console.error('Failed to start pack:', error);
+            this.setStatus('Failed to start pack', 'error');
+        }
+    }
+    
+    showActivePackPanel() {
+        if (!this.activeSession) return;
+        
+        const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
+        if (!pack) return;
+        
+        const context = this.contexts.find(c => c.id === pack.activityContextId);
+        
+        this.elements.activePackTitle.textContent = pack.title;
+        this.elements.activePackMeta.textContent = `${context ? context.name : 'No context'} • ${pack.subtaskIds.length} tasks`;
+        
+        this.elements.activePackPanel.style.display = 'block';
+        this.updateTimerDisplay();
+        this.updateBreakInfo();
+    }
+    
+    hideActivePackPanel() {
+        this.elements.activePackPanel.style.display = 'none';
+        this.stopTimer();
+    }
+    
+    startTimer() {
+        if (this.timer) return;
+        
+        this.timerStartTime = Date.now() - (this.timerElapsed * 1000);
+        this.timerPaused = false;
+        
+        this.timer = setInterval(() => {
+            this.updateTimerDisplay();
+        }, 1000);
+        
+        this.elements.pauseBtn.style.display = 'inline-block';
+        this.elements.resumeBtn.style.display = 'none';
+        this.elements.timerStatus.textContent = 'Running';
+    }
+    
+    stopTimer() {
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = null;
+        }
+    }
+    
+    pauseSession() {
+        if (!this.activeSession || this.timerPaused) return;
+        
+        this.timerPaused = true;
+        this.stopTimer();
+        
+        // Record pause interval
+        this.activeSession.pausedIntervals.push({
+            pausedAt: new Date().toISOString()
+        });
+        
+        this.activeSession.status = 'paused';
+        this.saveDatabase();
+        
+        this.elements.pauseBtn.style.display = 'none';
+        this.elements.resumeBtn.style.display = 'inline-block';
+        this.elements.timerStatus.textContent = 'Paused';
+        
+        this.loadPacksForDate();
+    }
+    
+    resumeSession() {
+        if (!this.activeSession || !this.timerPaused) return;
+        
+        // Complete the last pause interval
+        const lastPause = this.activeSession.pausedIntervals[this.activeSession.pausedIntervals.length - 1];
+        if (lastPause && !lastPause.resumedAt) {
+            lastPause.resumedAt = new Date().toISOString();
+        }
+        
+        this.activeSession.status = 'running';
+        this.saveDatabase();
+        
+        this.startTimer();
+        this.loadPacksForDate();
+    }
+    
+    async stopSession() {
+        if (!this.activeSession) return;
+        
+        try {
+            this.stopTimer();
+            
+            // Complete the session
+            this.activeSession.endedAt = new Date().toISOString();
+            this.activeSession.status = 'completed';
+            this.activeSession.totalElapsedSeconds = this.timerElapsed;
+            this.activeSession.activeElapsedSeconds = this.calculateActiveElapsed();
+            
+            // Update pack status
+            const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
+            if (pack) {
+                pack.status = 'completed';
+                pack.completedAt = new Date().toISOString();
+                pack.updatedAt = new Date().toISOString();
+            }
+            
+            await this.saveDatabase();
+            
+            // Show rating modal
+            this.showRatingModal();
+            
+            this.activeSession = null;
+            this.timerElapsed = 0;
+            this.hideActivePackPanel();
+            this.loadPacksForDate();
+            
+            this.setStatus('Session completed');
+        } catch (error) {
+            console.error('Failed to stop session:', error);
+            this.setStatus('Failed to stop session', 'error');
+        }
+    }
+    
+    calculateActiveElapsed() {
+        let activeTime = this.timerElapsed;
+        
+        // Subtract paused time
+        for (const interval of this.activeSession.pausedIntervals) {
+            if (interval.pausedAt && interval.resumedAt) {
+                const pausedMs = new Date(interval.resumedAt) - new Date(interval.pausedAt);
+                activeTime -= Math.floor(pausedMs / 1000);
+            }
+        }
+        
+        return Math.max(0, activeTime);
+    }
+    
+    updateTimerDisplay() {
+        if (this.timerPaused) return;
+        
+        this.timerElapsed = Math.floor((Date.now() - this.timerStartTime) / 1000);
+        
+        const hours = Math.floor(this.timerElapsed / 3600);
+        const minutes = Math.floor((this.timerElapsed % 3600) / 60);
+        const seconds = this.timerElapsed % 60;
+        
+        const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        this.elements.timerDisplay.textContent = timeStr;
+    }
+    
+    updateBreakInfo() {
+        if (!this.activeSession) return;
+        
+        const strategies = this.activeSession.breakStrategyIds.map(id =>
+            this.strategies.find(s => s.id === id)
+        ).filter(Boolean);
+        
+        if (strategies.length === 0) {
+            this.elements.breakInfo.textContent = 'No break strategies selected';
+            return;
+        }
+        
+        // Find next break (simplified - just show first strategy)
+        const nextStrategy = strategies[0];
+        const nextBreakMinutes = nextStrategy.intervalMinutes;
+        const elapsedMinutes = Math.floor(this.timerElapsed / 60);
+        const minutesUntilBreak = nextBreakMinutes - (elapsedMinutes % nextBreakMinutes);
+        
+        this.elements.breakInfo.innerHTML = `
+            <strong>Next break:</strong> ${nextStrategy.name} in ${minutesUntilBreak} minutes
+        `;
+    }
+    
+    startBreak() {
+        if (!this.activeSession) return;
+        
+        // For now, just show a simple alert with break instructions
+        const strategies = this.activeSession.breakStrategyIds.map(id =>
+            this.strategies.find(s => s.id === id)
+        ).filter(Boolean);
+        
+        if (strategies.length > 0) {
+            const strategy = strategies[0];
+            alert(`Break Time!\n\n${strategy.name}\n\n${strategy.prompt}`);
+        }
+    }
+    
+    // Context Management
+    showContextModal(contextId = null) {
+        const isEdit = !!contextId;
+        const context = isEdit ? this.contexts.find(c => c.id === contextId) : null;
+        
+        document.getElementById('context-modal-title').textContent = isEdit ? 'Edit Context' : 'Add Context';
+        
+        if (context) {
+            document.getElementById('context-name').value = context.name;
+            document.getElementById('context-description').value = context.description || '';
+            document.getElementById('context-type').value = context.activityType;
+        } else {
+            this.elements.contextForm.reset();
+        }
+        
+        this.elements.contextForm.dataset.contextId = contextId || '';
+        this.elements.contextModal.classList.add('show');
+    }
+    
+    hideContextModal() {
+        this.elements.contextModal.classList.remove('show');
+        this.elements.contextForm.reset();
+        delete this.elements.contextForm.dataset.contextId;
+    }
+    
+    async saveContext() {
+        try {
+            const contextId = this.elements.contextForm.dataset.contextId;
+            const isEdit = !!contextId;
+            
+            const name = document.getElementById('context-name').value.trim();
+            const description = document.getElementById('context-description').value.trim();
+            const activityType = document.getElementById('context-type').value;
+            
+            if (!name) {
+                this.setStatus('Please enter a context name', 'error');
+                return;
+            }
+            
+            if (isEdit) {
+                const context = this.contexts.find(c => c.id === contextId);
+                if (context) {
+                    context.name = name;
+                    context.description = description;
+                    context.activityType = activityType;
+                    context.updatedAt = new Date().toISOString();
+                }
+            } else {
+                const context = {
+                    id: this.generateId(),
+                    name,
+                    description,
+                    activityType,
+                    active: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                this.db.activityContexts.push(context);
+            }
+            
+            await this.saveDatabase();
+            this.contexts = this.db.activityContexts;
+            this.renderContexts();
+            this.hideContextModal();
+            
+            this.setStatus(isEdit ? 'Context updated' : 'Context created');
+        } catch (error) {
+            console.error('Failed to save context:', error);
+            this.setStatus('Failed to save context', 'error');
+        }
+    }
+    
+    renderContexts() {
+        this.elements.contextsList.innerHTML = this.contexts.map(context => `
+            <div class="context-item">
+                <div class="context-item-header">
+                    <div>
+                        <div class="context-item-name">${this.escapeHtml(context.name)}</div>
+                        <div class="context-item-type">${context.activityType.replace('_', ' ')}</div>
+                    </div>
+                </div>
+                ${context.description ? `<div class="context-item-description">${this.escapeHtml(context.description)}</div>` : ''}
+                <div class="context-item-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="taskPacksApp.showContextModal('${context.id}')">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="taskPacksApp.deleteContext('${context.id}')">Delete</button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    async deleteContext(contextId) {
+        if (!confirm('Are you sure you want to delete this context?')) return;
+        
+        try {
+            this.db.activityContexts = this.db.activityContexts.filter(c => c.id !== contextId);
+            await this.saveDatabase();
+            this.contexts = this.db.activityContexts;
+            this.renderContexts();
+            this.setStatus('Context deleted');
+        } catch (error) {
+            console.error('Failed to delete context:', error);
+            this.setStatus('Failed to delete context', 'error');
+        }
+    }
+    
+    // Strategy Management
+    showStrategyModal(strategyId = null) {
+        const isEdit = !!strategyId;
+        const strategy = isEdit ? this.strategies.find(s => s.id === strategyId) : null;
+        
+        document.getElementById('strategy-modal-title').textContent = isEdit ? 'Edit Strategy' : 'Add Strategy';
+        
+        if (strategy) {
+            document.getElementById('strategy-name').value = strategy.name;
+            document.getElementById('strategy-description').value = strategy.description || '';
+            document.getElementById('strategy-type').value = strategy.breakType;
+            document.getElementById('strategy-duration').value = strategy.suggestedDurationSeconds;
+            document.getElementById('strategy-interval').value = strategy.intervalMinutes;
+            document.getElementById('strategy-prompt').value = strategy.prompt || '';
+        } else {
+            this.elements.strategyForm.reset();
+        }
+        
+        this.elements.strategyForm.dataset.strategyId = strategyId || '';
+        this.elements.strategyModal.classList.add('show');
+    }
+    
+    hideStrategyModal() {
+        this.elements.strategyModal.classList.remove('show');
+        this.elements.strategyForm.reset();
+        delete this.elements.strategyForm.dataset.strategyId;
+    }
+    
+    async saveStrategy() {
+        try {
+            const strategyId = this.elements.strategyForm.dataset.strategyId;
+            const isEdit = !!strategyId;
+            
+            const name = document.getElementById('strategy-name').value.trim();
+            const description = document.getElementById('strategy-description').value.trim();
+            const breakType = document.getElementById('strategy-type').value;
+            const suggestedDurationSeconds = parseInt(document.getElementById('strategy-duration').value) || 90;
+            const intervalMinutes = parseInt(document.getElementById('strategy-interval').value) || 20;
+            const prompt = document.getElementById('strategy-prompt').value.trim();
+            
+            if (!name) {
+                this.setStatus('Please enter a strategy name', 'error');
+                return;
+            }
+            
+            if (isEdit) {
+                const strategy = this.strategies.find(s => s.id === strategyId);
+                if (strategy) {
+                    strategy.name = name;
+                    strategy.description = description;
+                    strategy.breakType = breakType;
+                    strategy.suggestedDurationSeconds = suggestedDurationSeconds;
+                    strategy.intervalMinutes = intervalMinutes;
+                    strategy.prompt = prompt;
+                    strategy.updatedAt = new Date().toISOString();
+                }
+            } else {
+                const strategy = {
+                    id: this.generateId(),
+                    name,
+                    description,
+                    breakType,
+                    suggestedDurationSeconds,
+                    intervalMinutes,
+                    prompt,
+                    active: true,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                this.db.breakStrategies.push(strategy);
+            }
+            
+            await this.saveDatabase();
+            this.strategies = this.db.breakStrategies;
+            this.renderStrategies();
+            this.hideStrategyModal();
+            
+            this.setStatus(isEdit ? 'Strategy updated' : 'Strategy created');
+        } catch (error) {
+            console.error('Failed to save strategy:', error);
+            this.setStatus('Failed to save strategy', 'error');
+        }
+    }
+    
+    renderStrategies() {
+        this.elements.strategiesList.innerHTML = this.strategies.map(strategy => `
+            <div class="strategy-item-card">
+                <div class="strategy-item-header">
+                    <div>
+                        <div class="strategy-item-card-name">${this.escapeHtml(strategy.name)}</div>
+                        <div class="strategy-item-card-type">${strategy.breakType.replace('_', ' ')}</div>
+                    </div>
+                </div>
+                ${strategy.description ? `<div class="strategy-item-card-description">${this.escapeHtml(strategy.description)}</div>` : ''}
+                <div class="strategy-item-card-description">
+                    Every ${strategy.intervalMinutes} minutes • ${strategy.suggestedDurationSeconds} seconds
+                </div>
+                ${strategy.prompt ? `<div class="strategy-item-card-description"><em>"${this.escapeHtml(strategy.prompt)}"</em></div>` : ''}
+                <div class="strategy-item-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="taskPacksApp.showStrategyModal('${strategy.id}')">Edit</button>
+                    <button class="btn btn-danger btn-sm" onclick="taskPacksApp.deleteStrategy('${strategy.id}')">Delete</button>
+                </div>
+            </div>
+        `).join('');
+    }
+    
+    async deleteStrategy(strategyId) {
+        if (!confirm('Are you sure you want to delete this strategy?')) return;
+        
+        try {
+            this.db.breakStrategies = this.db.breakStrategies.filter(s => s.id !== strategyId);
+            await this.saveDatabase();
+            this.strategies = this.db.breakStrategies;
+            this.renderStrategies();
+            this.setStatus('Strategy deleted');
+        } catch (error) {
+            console.error('Failed to delete strategy:', error);
+            this.setStatus('Failed to delete strategy', 'error');
+        }
+    }
+    
+    // Rating Modal
+    showRatingModal() {
+        this.elements.ratingModal.classList.add('show');
+    }
+    
+    hideRatingModal() {
+        this.elements.ratingModal.classList.remove('show');
+        this.elements.ratingForm.reset();
+    }
+    
+    async saveRating() {
+        try {
+            const helpfulness = document.querySelector('input[name="helpfulness"]:checked')?.value;
+            const timingFit = document.querySelector('input[name="timingFit"]:checked')?.value;
+            const notes = document.getElementById('rating-notes').value.trim();
+            
+            const rating = {
+                id: this.generateId(),
+                taskPackId: this.activeSession?.taskPackId,
+                activitySessionId: this.activeSession?.id,
+                ratingType: 'overall_pack_strategy',
+                helpfulness: helpfulness ? parseInt(helpfulness) : null,
+                timingFit: timingFit ? parseInt(timingFit) : null,
+                notes,
+                createdAt: new Date().toISOString()
+            };
+            
+            this.db.strategyRatings.push(rating);
+            await this.saveDatabase();
+            
+            this.hideRatingModal();
+            this.setStatus('Rating saved');
+        } catch (error) {
+            console.error('Failed to save rating:', error);
+            this.setStatus('Failed to save rating', 'error');
+        }
+    }
+    
+    // Utility methods
+    generateId() {
+        return Date.now().toString(36) + Math.random().toString(36).substr(2);
+    }
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+    
+    setStatus(message, type = '') {
+        this.elements.statusBar.textContent = message;
+        this.elements.statusBar.className = 'status-bar';
+        if (type) {
+            this.elements.statusBar.classList.add(type);
+        }
+        
+        // Auto-clear status after 5 seconds
+        setTimeout(() => {
+            if (this.elements.statusBar.textContent === message) {
+                this.elements.statusBar.textContent = '';
+                this.elements.statusBar.className = 'status-bar';
+            }
+        }, 5000);
+    }
+    
+    // Placeholder methods for pack management
+    async editPack(packId) {
+        this.setStatus('Edit pack functionality not yet implemented');
+    }
+    
+    async deletePack(packId) {
+        if (!confirm('Are you sure you want to delete this pack?')) return;
+        
+        try {
+            this.db.taskPacks = this.db.taskPacks.filter(p => p.id !== packId);
+            await this.saveDatabase();
+            this.packs = this.db.taskPacks;
+            this.loadPacksForDate();
+            this.setStatus('Pack deleted');
+        } catch (error) {
+            console.error('Failed to delete pack:', error);
+            this.setStatus('Failed to delete pack', 'error');
+        }
+    }
+    
+    async resumePack(packId) {
+        // Find the most recent session for this pack
+        const sessions = this.sessions.filter(s => s.taskPackId === packId && s.status === 'paused');
+        if (sessions.length > 0) {
+            const session = sessions[sessions.length - 1];
+            this.activeSession = session;
+            this.resumeSession();
+        }
+    }
+}
+
+// Initialize the app
+let taskPacksApp;
+document.addEventListener('DOMContentLoaded', () => {
+    taskPacksApp = new TaskPacksApp();
+});

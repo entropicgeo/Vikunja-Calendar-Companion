@@ -7,6 +7,19 @@
   --border: #2a3140;
   --accent: #4f8cff;
   --danger: #ff4f6d;
+  
+  /* Task Packs variables */
+  --primary: #4f8cff;
+  --primary-rgb: 79, 140, 255;
+  --secondary: #6c757d;
+  --success: #28a745;
+  --warning: #ffc107;
+  --info: #17a2b8;
+  --card-bg: var(--panel);
+  --hover-bg: var(--panel2);
+  --input-bg: var(--panel);
+  --text-primary: var(--text);
+  --text-secondary: var(--muted);
 }
 * { box-sizing: border-box; }
 body {
@@ -97,6 +110,120 @@ header h1 {
 
 .tools-link:hover {
   background: rgba(255,255,255,0.06);
+}
+
+/* Header navigation for other pages */
+.header-nav {
+  display: flex;
+  gap: 15px;
+}
+
+.nav-link {
+  color: var(--muted);
+  text-decoration: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.nav-link:hover {
+  color: var(--text);
+  background: rgba(255,255,255,0.06);
+}
+
+/* Button styles for Task Packs */
+.btn {
+  display: inline-block;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  background: var(--panel2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.btn:hover {
+  background: var(--hover-bg);
+  transform: translateY(-1px);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.btn-secondary {
+  background: var(--secondary);
+  color: white;
+  border-color: var(--secondary);
+}
+
+.btn-success {
+  background: var(--success);
+  color: white;
+  border-color: var(--success);
+}
+
+.btn-warning {
+  background: var(--warning);
+  color: #212529;
+  border-color: var(--warning);
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger);
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn-xs {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+/* Status bar */
+.status-bar {
+  padding: 10px 15px;
+  margin-bottom: 15px;
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
+.status-bar.success {
+  background: rgba(40, 167, 69, 0.1);
+  border-color: var(--success);
+  color: var(--success);
+}
+
+.status-bar.error {
+  background: rgba(255, 79, 109, 0.1);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.status-bar.warning {
+  background: rgba(255, 193, 7, 0.1);
+  border-color: var(--warning);
+  color: var(--warning);
+}
+
+.status-bar:empty {
+  display: none;
 }
 
 /* Modal link buttons styling */

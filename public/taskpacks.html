@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Packs - Vikunja Calendar Companion</title>
+    <link rel="stylesheet" href="styles/style.css">
+    <link rel="stylesheet" href="styles/taskpacks.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Task Packs</h1>
+            <div class="header-nav">
+                <a href="index.html" class="nav-link">Calendar</a>
+                <a href="bulksubtask.html" class="nav-link">Bulk Subtask</a>
+            </div>
+        </header>
+
+        <div class="status-bar" id="status-bar"></div>
+
+        <!-- Date Selection -->
+        <div class="date-selector">
+            <label for="pack-date">Date:</label>
+            <input type="date" id="pack-date" />
+            <button id="today-btn" class="btn btn-secondary">Today</button>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+            <button class="tab-btn active" data-tab="packs">Packs</button>
+            <button class="tab-btn" data-tab="create">Create Pack</button>
+            <button class="tab-btn" data-tab="contexts">Contexts</button>
+            <button class="tab-btn" data-tab="strategies">Break Strategies</button>
+            <button class="tab-btn" data-tab="config">Config</button>
+        </div>
+
+        <!-- Packs Tab -->
+        <div class="tab-content active" id="packs-tab">
+            <div class="active-pack-panel" id="active-pack-panel" style="display: none;">
+                <h3>Active Session</h3>
+                <div class="pack-info">
+                    <div class="pack-title" id="active-pack-title"></div>
+                    <div class="pack-meta" id="active-pack-meta"></div>
+                </div>
+                <div class="timer-display">
+                    <div class="timer-time" id="timer-display">00:00:00</div>
+                    <div class="timer-status" id="timer-status">Running</div>
+                </div>
+                <div class="break-info" id="break-info"></div>
+                <div class="pack-controls">
+                    <button id="pause-btn" class="btn btn-warning">Pause</button>
+                    <button id="resume-btn" class="btn btn-primary" style="display: none;">Resume</button>
+                    <button id="stop-btn" class="btn btn-danger">Stop</button>
+                    <button id="break-now-btn" class="btn btn-secondary">Break Now</button>
+                </div>
+            </div>
+
+            <div class="packs-list" id="packs-list">
+                <div class="loading">No packs for this date</div>
+            </div>
+        </div>
+
+        <!-- Create Pack Tab -->
+        <div class="tab-content" id="create-tab">
+            <form id="create-pack-form">
+                <div class="form-group">
+                    <label for="pack-title">Pack Title:</label>
+                    <input type="text" id="pack-title" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="pack-description">Description:</label>
+                    <textarea id="pack-description" rows="3"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Select Tasks:</label>
+                    <div class="task-selection">
+                        <div class="task-filters">
+                            <input type="text" id="task-filter" placeholder="Filter tasks...">
+                            <select id="project-filter">
+                                <option value="">All projects</option>
+                            </select>
+                        </div>
+                        <div class="task-list" id="available-tasks"></div>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="activity-context">Activity Context:</label>
+                    <select id="activity-context">
+                        <option value="">Select context...</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label>Break Strategies:</label>
+                    <div class="strategy-list" id="break-strategies"></div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Create Pack</button>
+                    <button type="button" id="clear-form-btn" class="btn btn-secondary">Clear</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Contexts Tab -->
+        <div class="tab-content" id="contexts-tab">
+            <div class="tab-header">
+                <h3>Activity Contexts</h3>
+                <button id="add-context-btn" class="btn btn-primary">Add Context</button>
+            </div>
+            <div class="contexts-list" id="contexts-list"></div>
+        </div>
+
+        <!-- Break Strategies Tab -->
+        <div class="tab-content" id="strategies-tab">
+            <div class="tab-header">
+                <h3>Break Strategies</h3>
+                <button id="add-strategy-btn" class="btn btn-primary">Add Strategy</button>
+            </div>
+            <div class="strategies-list" id="strategies-list"></div>
+        </div>
+
+        <!-- Config Tab -->
+        <div class="tab-content" id="config-tab">
+            <div class="config-section">
+                <h3>Task Packs Configuration</h3>
+                <div class="form-group">
+                    <label for="task-packs-project">Task Packs Project ID:</label>
+                    <input type="number" id="task-packs-project" placeholder="Enter project ID">
+                    <small>The Vikunja project where Task Pack parent tasks will be created</small>
+                </div>
+                <div class="form-group">
+                    <label for="default-duration">Default Pack Duration (minutes):</label>
+                    <input type="number" id="default-duration" value="45" min="1">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="break-notifications">
+                        Enable break notifications by default
+                    </label>
+                </div>
+                <button id="save-config-btn" class="btn btn-primary">Save Configuration</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Context Modal -->
+    <div class="modal" id="context-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="context-modal-title">Add Context</h3>
+                <button class="modal-close" id="context-modal-close">&times;</button>
+            </div>
+            <form id="context-form">
+                <div class="form-group">
+                    <label for="context-name">Name:</label>
+                    <input type="text" id="context-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="context-description">Description:</label>
+                    <textarea id="context-description" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="context-type">Activity Type:</label>
+                    <select id="context-type">
+                        <option value="computer_work">Computer Work</option>
+                        <option value="standing">Standing</option>
+                        <option value="walking">Walking</option>
+                        <option value="driving">Driving</option>
+                        <option value="load_bearing">Load Bearing</option>
+                        <option value="chores">Chores</option>
+                        <option value="reclining">Reclining</option>
+                        <option value="admin">Admin</option>
+                        <option value="deep_work">Deep Work</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-secondary" id="context-cancel">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Strategy Modal -->
+    <div class="modal" id="strategy-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="strategy-modal-title">Add Break Strategy</h3>
+                <button class="modal-close" id="strategy-modal-close">&times;</button>
+            </div>
+            <form id="strategy-form">
+                <div class="form-group">
+                    <label for="strategy-name">Name:</label>
+                    <input type="text" id="strategy-name" required>
+                </div>
+                <div class="form-group">
+                    <label for="strategy-description">Description:</label>
+                    <textarea id="strategy-description" rows="3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="strategy-type">Break Type:</label>
+                    <select id="strategy-type">
+                        <option value="microbreak">Microbreak</option>
+                        <option value="long_break">Long Break</option>
+                        <option value="pre_task_reset">Pre-task Reset</option>
+                        <option value="post_task_reset">Post-task Reset</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="strategy-duration">Duration (seconds):</label>
+                    <input type="number" id="strategy-duration" value="90" min="1">
+                </div>
+                <div class="form-group">
+                    <label for="strategy-interval">Interval (minutes):</label>
+                    <input type="number" id="strategy-interval" value="20" min="1">
+                </div>
+                <div class="form-group">
+                    <label for="strategy-prompt">Prompt:</label>
+                    <textarea id="strategy-prompt" rows="3" placeholder="Instructions for the break..."></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                    <button type="button" class="btn btn-secondary" id="strategy-cancel">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Rating Modal -->
+    <div class="modal" id="rating-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Rate Session</h3>
+                <button class="modal-close" id="rating-modal-close">&times;</button>
+            </div>
+            <form id="rating-form">
+                <div class="form-group">
+                    <label>Helpfulness (1-5):</label>
+                    <div class="rating-scale">
+                        <input type="radio" name="helpfulness" value="1" id="help1"><label for="help1">1</label>
+                        <input type="radio" name="helpfulness" value="2" id="help2"><label for="help2">2</label>
+                        <input type="radio" name="helpfulness" value="3" id="help3"><label for="help3">3</label>
+                        <input type="radio" name="helpfulness" value="4" id="help4"><label for="help4">4</label>
+                        <input type="radio" name="helpfulness" value="5" id="help5"><label for="help5">5</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Timing Fit (1-5):</label>
+                    <div class="rating-scale">
+                        <input type="radio" name="timingFit" value="1" id="timing1"><label for="timing1">1</label>
+                        <input type="radio" name="timingFit" value="2" id="timing2"><label for="timing2">2</label>
+                        <input type="radio" name="timingFit" value="3" id="timing3"><label for="timing3">3</label>
+                        <input type="radio" name="timingFit" value="4" id="timing4"><label for="timing4">4</label>
+                        <input type="radio" name="timingFit" value="5" id="timing5"><label for="timing5">5</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="rating-notes">Notes:</label>
+                    <textarea id="rating-notes" rows="3"></textarea>
+                </div>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Save Rating</button>
+                    <button type="button" class="btn btn-secondary" id="rating-cancel">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/taskpacks.js"></script>
+</body>
+</html>

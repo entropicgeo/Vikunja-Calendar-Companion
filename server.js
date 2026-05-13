@@ -34,6 +34,15 @@ const db = new Low(adapter, { dayColors: {} }); // Provide default data structur
       purple: "Purple"
     };
     
+    // Task Packs collections
+    db.data.taskPacks = db.data.taskPacks || [];
+    db.data.activitySessions = db.data.activitySessions || [];
+    db.data.activityContexts = db.data.activityContexts || [];
+    db.data.breakStrategies = db.data.breakStrategies || [];
+    db.data.breakEvents = db.data.breakEvents || [];
+    db.data.strategyRatings = db.data.strategyRatings || [];
+    db.data.taskPacksConfig = db.data.taskPacksConfig || {};
+    
     await db.write();
   } catch (error) {
     console.error('Error reading database:', error);
@@ -46,7 +55,14 @@ const db = new Low(adapter, { dayColors: {} }); // Provide default data structur
         blue: "Blue",
         yellow: "Yellow",
         purple: "Purple"
-      }
+      },
+      taskPacks: [],
+      activitySessions: [],
+      activityContexts: [],
+      breakStrategies: [],
+      breakEvents: [],
+      strategyRatings: [],
+      taskPacksConfig: {}
     };
     try {
       await db.write();
@@ -284,6 +300,97 @@ app.get('/api/config', (req, res) => {
   res.json({
     baseUrl: process.env.API_BASE_URL
   });
+});
+
+// Database endpoints for Task Packs
+app.get('/api/db', async (req, res) => {
+  try {
+    await db.read();
+    res.json(db.data || {});
+  } catch (error) {
+    console.error('Error reading database:', error);
+    res.status(500).json({ error: 'Failed to read database' });
+  }
+});
+
+app.post('/api/db', async (req, res) => {
+  try {
+    await db.read();
+    // Merge the provided data with existing data
+    db.data = { ...db.data, ...req.body };
+    await db.write();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error writing database:', error);
+    res.status(500).json({ error: 'Failed to write database' });
+  }
+});
+
+// Projects endpoint
+app.get('/api/projects', async (req, res) => {
+  try {
+    const baseUrl = process.env.API_BASE_URL;
+    const token = process.env.API_TOKEN;
+    
+    if (!baseUrl || !token) {
+      return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
+    }
+    
+    const response = await fetch(`${baseUrl}/api/v1/projects`, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (response.ok) {
+      const projects = await response.json();
+      res.json(projects);
+    } else {
+      const text = await response.text();
+      res.status(response.status).send(text);
+    }
+  } catch (error) {
+    console.error('Error fetching projects:', error);
+    res.status(500).json({ error: 'Failed to fetch projects' });
+  }
+});
+
+// Create task endpoint (for creating parent tasks)
+app.put('/api/tasks', async (req, res) => {
+  try {
+    const baseUrl = process.env.API_BASE_URL;
+    const token = process.env.API_TOKEN;
+    const payload = req.body;
+    
+    if (!baseUrl || !token) {
+      return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
+    }
+    
+    const url = `${baseUrl}/api/v1/tasks`;
+    
+    const response = await fetch(url, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).send(text);
+    }
+    
+    const data = await response.json();
+    res.json(data);
+  } catch (error) {
+    console.error('Error creating task:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Day color endpoints
