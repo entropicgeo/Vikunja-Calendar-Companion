@@ -450,6 +450,8 @@ class TaskPacksApp {
         this.elements.reminderType.addEventListener('change', () => this.updateReminderTypeOptions());
         this.elements.taskSearch.addEventListener('input', () => this.searchTasksForReminder('task-search'));
         this.elements.taskSearchDelay.addEventListener('input', () => this.searchTasksForReminder('task-search-delay'));
+        this.elements.taskSearch.addEventListener('focus', () => this.searchTasksForReminder('task-search'));
+        this.elements.taskSearchDelay.addEventListener('focus', () => this.searchTasksForReminder('task-search-delay'));
         
         // Modal backdrop clicks
         [this.elements.contextModal, this.elements.strategyModal, this.elements.ratingModal, 
@@ -2715,25 +2717,26 @@ class TaskPacksApp {
         const resultsId = searchInputId === 'task-search' ? 'task-search-results' : 'task-search-results-delay';
         const resultsContainer = document.getElementById(resultsId);
         
-        if (searchText.length < 1) {
-            resultsContainer.classList.remove('show');
-            return;
-        }
-        
         const today = new Date().toISOString().split('T')[0];
         
-        // Filter tasks for today, not done, and matching search text
+        // Filter tasks for today and not done
         let matchingTasks = this.allTasks.filter(task => {
             if (task.done) return false;
-            if (!(task.title || '').toLowerCase().includes(searchText)) return false;
             
             // Check if task is due today
             if (task.due_date) {
                 const taskDueDate = new Date(task.due_date).toISOString().split('T')[0];
-                return taskDueDate === today;
+                if (taskDueDate !== today) return false;
+            } else {
+                return false;
             }
             
-            return false;
+            // If there's search text, filter by it; otherwise show all today's tasks
+            if (searchText.length > 0) {
+                return (task.title || '').toLowerCase().includes(searchText);
+            }
+            
+            return true;
         });
         
         // Sort tasks: task pack parent tasks first, then by title
@@ -2798,6 +2801,13 @@ class TaskPacksApp {
         });
         
         resultsContainer.classList.add('show');
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.task-search-container')) {
+                resultsContainer.classList.remove('show');
+            }
+        });
     }
     
     updateSelectedTaskDisplay(searchType) {
