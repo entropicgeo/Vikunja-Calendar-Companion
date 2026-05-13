@@ -411,7 +411,7 @@ app.put('/api/tasks', async (req, res) => {
     console.log('Making request to:', url);
     
     const response = await fetch(url, {
-      method: 'PUT',
+      method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
