@@ -2206,34 +2206,43 @@ class TaskPacksApp {
             
             this.activeSession = activeSession;
             
-            // Calculate total elapsed time from session start
-            const sessionStartTime = new Date(activeSession.startedAt);
-            const now = new Date();
-            let totalElapsedSeconds = Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000);
+            // Use stored elapsed time if available, otherwise calculate from start time
+            let elapsedSeconds = 0;
             
-            // Subtract any completed pause intervals
-            let totalPausedSeconds = 0;
-            if (activeSession.pausedIntervals && Array.isArray(activeSession.pausedIntervals)) {
-                for (const interval of activeSession.pausedIntervals) {
-                    if (interval.pausedAt && interval.resumedAt) {
-                        const pausedMs = new Date(interval.resumedAt).getTime() - new Date(interval.pausedAt).getTime();
-                        totalPausedSeconds += Math.floor(pausedMs / 1000);
+            if (activeSession.currentElapsedSeconds !== undefined) {
+                // Use the stored elapsed time from the last sync
+                elapsedSeconds = activeSession.currentElapsedSeconds;
+            } else if (activeSession.totalElapsedSeconds !== undefined) {
+                // Fall back to total elapsed seconds
+                elapsedSeconds = activeSession.totalElapsedSeconds;
+            } else {
+                // Last resort: calculate from session start time (but this is less reliable)
+                const sessionStartTime = new Date(activeSession.startedAt);
+                const now = new Date();
+                elapsedSeconds = Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000);
+                
+                // Subtract completed pause intervals
+                if (activeSession.pausedIntervals && Array.isArray(activeSession.pausedIntervals)) {
+                    for (const interval of activeSession.pausedIntervals) {
+                        if (interval.pausedAt && interval.resumedAt) {
+                            const pausedMs = new Date(interval.resumedAt).getTime() - new Date(interval.pausedAt).getTime();
+                            elapsedSeconds -= Math.floor(pausedMs / 1000);
+                        }
                     }
                 }
             }
+            
+            // Ensure elapsed time is reasonable (not negative or excessively large)
+            elapsedSeconds = Math.max(0, Math.min(elapsedSeconds, 24 * 60 * 60)); // Cap at 24 hours
+            
+            this.timerElapsed = elapsedSeconds;
             
             // Check if currently in a paused state
             const lastPause = activeSession.pausedIntervals && activeSession.pausedIntervals.length > 0 ? 
                 activeSession.pausedIntervals[activeSession.pausedIntervals.length - 1] : null;
             const isCurrentlyPaused = lastPause && lastPause.pausedAt && !lastPause.resumedAt;
             
-            if (isCurrentlyPaused) {
-                // If paused, calculate elapsed time up to the pause point
-                const pauseTime = new Date(lastPause.pausedAt);
-                totalElapsedSeconds = Math.floor((pauseTime.getTime() - sessionStartTime.getTime()) / 1000);
-                totalElapsedSeconds -= totalPausedSeconds; // Subtract previous pauses
-                
-                this.timerElapsed = Math.max(0, totalElapsedSeconds);
+            if (isCurrentlyPaused || activeSession.status === 'paused') {
                 this.timerPaused = true;
                 this.activeSession.status = 'paused';
                 
@@ -2247,10 +2256,9 @@ class TaskPacksApp {
                 // Update timer display for paused state
                 this.updateTimerDisplay();
             } else {
-                // If running, calculate current elapsed time
-                totalElapsedSeconds -= totalPausedSeconds;
-                this.timerElapsed = Math.max(0, totalElapsedSeconds);
+                // If running, start the timer with the restored elapsed time
                 this.timerPaused = false;
+                this.activeSession.status = 'running';
                 
                 this.showActivePackPanel();
                 this.startTimer();
