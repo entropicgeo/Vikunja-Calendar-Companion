@@ -1131,7 +1131,7 @@ class TaskPacksApp {
         }
     }
     
-    pauseSession() {
+    async pauseSession() {
         if (!this.activeSession || this.timerPaused) return;
         
         // Calculate current elapsed time before pausing
@@ -1158,7 +1158,7 @@ class TaskPacksApp {
         this.loadPacksForDate();
     }
     
-    resumeSession() {
+    async resumeSession() {
         if (!this.activeSession || !this.timerPaused) return;
         
         // Complete the last pause interval
