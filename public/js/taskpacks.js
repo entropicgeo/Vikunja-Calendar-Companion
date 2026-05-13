@@ -1028,6 +1028,11 @@ class TaskPacksApp {
             const pack = this.packs.find(p => p.id === packId);
             if (!pack) return;
             
+            // Reset timer state for new session
+            this.timerElapsed = 0;
+            this.timerStartTime = null;
+            this.timerPaused = false;
+            
             // Create activity session
             const session = {
                 id: this.generateId(),
@@ -1091,6 +1096,11 @@ class TaskPacksApp {
     
     startTimer() {
         if (this.timer) return;
+        
+        // Reset timer elapsed to 0 when starting a new session
+        if (!this.activeSession || this.activeSession.status !== 'paused') {
+            this.timerElapsed = 0;
+        }
         
         this.timerStartTime = Date.now() - (this.timerElapsed * 1000);
         this.timerPaused = false;
