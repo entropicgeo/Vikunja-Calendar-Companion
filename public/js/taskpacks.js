@@ -1106,12 +1106,7 @@ class TaskPacksApp {
     startTimer() {
         if (this.timer) return;
         
-        // Only reset timer elapsed to 0 when starting a completely new session
-        // For resumed sessions, preserve the elapsed time
-        if (!this.timerPaused && (!this.activeSession || this.activeSession.status === 'running')) {
-            this.timerElapsed = 0;
-        }
-        
+        // Set timer start time based on current elapsed time
         this.timerStartTime = Date.now() - (this.timerElapsed * 1000);
         this.timerPaused = false;
         
@@ -2176,16 +2171,18 @@ class TaskPacksApp {
         if (!this.activeSession) return;
         
         try {
+            // Calculate current elapsed time if timer is running
+            if (!this.timerPaused && this.timerStartTime) {
+                this.timerElapsed = Math.floor((Date.now() - this.timerStartTime) / 1000);
+            }
+            
             // Update session with current timer state
             this.activeSession.totalElapsedSeconds = this.timerElapsed;
             this.activeSession.activeElapsedSeconds = this.calculateActiveElapsed();
             this.activeSession.lastSyncAt = new Date().toISOString();
             
-            // If timer is running, store the current start time for restoration
-            if (!this.timerPaused && this.timerStartTime) {
-                this.activeSession.timerStartTime = this.timerStartTime;
-                this.activeSession.timerElapsed = this.timerElapsed;
-            }
+            // Store current elapsed time for restoration
+            this.activeSession.currentElapsedSeconds = this.timerElapsed;
             
             // Update the session in the database
             const sessionIndex = this.db.activitySessions.findIndex(s => s.id === this.activeSession.id);
@@ -2209,35 +2206,46 @@ class TaskPacksApp {
             
             this.activeSession = activeSession;
             
-            // Restore timer state if session was running
-            if (activeSession.status === 'running') {
-                // Calculate elapsed time since last sync
-                const lastSyncTime = activeSession.lastSyncAt ? new Date(activeSession.lastSyncAt) : new Date(activeSession.startedAt);
-                const now = new Date();
-                const timeSinceSync = Math.floor((now.getTime() - lastSyncTime.getTime()) / 1000);
+            // Calculate total elapsed time from session start
+            const sessionStartTime = new Date(activeSession.startedAt);
+            const now = new Date();
+            let totalElapsedSeconds = Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000);
+            
+            // Subtract any completed pause intervals
+            let totalPausedSeconds = 0;
+            if (activeSession.pausedIntervals && Array.isArray(activeSession.pausedIntervals)) {
+                for (const interval of activeSession.pausedIntervals) {
+                    if (interval.pausedAt && interval.resumedAt) {
+                        const pausedMs = new Date(interval.resumedAt).getTime() - new Date(interval.pausedAt).getTime();
+                        totalPausedSeconds += Math.floor(pausedMs / 1000);
+                    }
+                }
+            }
+            
+            // Check if currently in a paused state
+            const lastPause = activeSession.pausedIntervals && activeSession.pausedIntervals.length > 0 ? 
+                activeSession.pausedIntervals[activeSession.pausedIntervals.length - 1] : null;
+            const isCurrentlyPaused = lastPause && lastPause.pausedAt && !lastPause.resumedAt;
+            
+            if (isCurrentlyPaused) {
+                // If paused, calculate elapsed time up to the pause point
+                const pauseTime = new Date(lastPause.pausedAt);
+                totalElapsedSeconds = Math.floor((pauseTime.getTime() - sessionStartTime.getTime()) / 1000);
+                totalElapsedSeconds -= totalPausedSeconds; // Subtract previous pauses
                 
-                // Restore timer state
-                this.timerElapsed = (activeSession.timerElapsed || 0) + timeSinceSync;
+                this.timerElapsed = Math.max(0, totalElapsedSeconds);
+                this.timerPaused = true;
+                this.activeSession.status = 'paused';
+                
+                this.showActivePackPanel();
+            } else {
+                // If running, calculate current elapsed time
+                totalElapsedSeconds -= totalPausedSeconds;
+                this.timerElapsed = Math.max(0, totalElapsedSeconds);
                 this.timerPaused = false;
                 
-                // Account for any paused time that wasn't resumed
-                const lastPause = activeSession.pausedIntervals[activeSession.pausedIntervals.length - 1];
-                if (lastPause && lastPause.pausedAt && !lastPause.resumedAt) {
-                    // Session was paused but not resumed - mark as paused
-                    this.activeSession.status = 'paused';
-                    this.timerPaused = true;
-                }
-                
                 this.showActivePackPanel();
-                
-                if (!this.timerPaused) {
-                    this.startTimer();
-                }
-            } else if (activeSession.status === 'paused') {
-                // Restore paused state
-                this.timerElapsed = activeSession.timerElapsed || 0;
-                this.timerPaused = true;
-                this.showActivePackPanel();
+                this.startTimer();
             }
             
             this.setStatus('Restored active session from previous browser session');
