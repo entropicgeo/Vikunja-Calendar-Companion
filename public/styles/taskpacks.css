@@ -776,3 +776,91 @@
         gap: 8px;
     }
 }
+
+/* Break Notification Styles */
+.break-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: var(--card-bg);
+    border: 2px solid var(--warning);
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    z-index: 1002;
+    max-width: 350px;
+    animation: slideIn 0.3s ease, pulse 2s infinite;
+}
+
+.break-notification-content h4 {
+    margin: 0 0 8px 0;
+    color: var(--warning);
+    font-size: 18px;
+    font-weight: 700;
+}
+
+.break-notification-content h5 {
+    margin: 0 0 12px 0;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.break-notification-content p {
+    margin: 0 0 16px 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.break-notification-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.current-break {
+    background: rgba(var(--primary-rgb), 0.1);
+    border: 1px solid var(--primary);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 10px 0;
+}
+
+.current-break strong {
+    color: var(--primary);
+    display: block;
+    margin-bottom: 8px;
+}
+
+.current-break p {
+    margin: 8px 0;
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 1.4;
+}
+
+.current-break small {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    }
+    50% {
+        box-shadow: 0 8px 24px rgba(255, 193, 7, 0.4);
+    }
+}
