@@ -2217,20 +2217,41 @@ class TaskPacksApp {
             
             this.activeSession = activeSession;
             
-            // Use stored elapsed time if available, otherwise start fresh
+            // Calculate elapsed time based on session state
             let elapsedSeconds = 0;
             
-            if (activeSession.currentElapsedSeconds !== undefined && activeSession.currentElapsedSeconds >= 0) {
-                // Use the stored elapsed time from the last sync
-                elapsedSeconds = activeSession.currentElapsedSeconds;
-            } else if (activeSession.totalElapsedSeconds !== undefined && activeSession.totalElapsedSeconds >= 0) {
-                // Fall back to total elapsed seconds
-                elapsedSeconds = activeSession.totalElapsedSeconds;
+            // Check if currently in a paused state first
+            const lastPause = activeSession.pausedIntervals && activeSession.pausedIntervals.length > 0 ? 
+                activeSession.pausedIntervals[activeSession.pausedIntervals.length - 1] : null;
+            const isCurrentlyPaused = lastPause && lastPause.pausedAt && !lastPause.resumedAt;
+            
+            if (isCurrentlyPaused || activeSession.status === 'paused') {
+                // For paused sessions, use stored elapsed time
+                if (activeSession.currentElapsedSeconds !== undefined && activeSession.currentElapsedSeconds >= 0) {
+                    elapsedSeconds = activeSession.currentElapsedSeconds;
+                } else if (activeSession.totalElapsedSeconds !== undefined && activeSession.totalElapsedSeconds >= 0) {
+                    elapsedSeconds = activeSession.totalElapsedSeconds;
+                } else {
+                    elapsedSeconds = 0;
+                }
             } else {
-                // If no stored time is available, start fresh rather than calculating from start time
-                // This prevents huge numbers when sessions are restored after long periods
-                console.warn('No stored elapsed time found for session, starting timer from 0');
-                elapsedSeconds = 0;
+                // For running sessions, calculate actual elapsed time from start
+                const sessionStartTime = new Date(activeSession.startedAt);
+                const now = new Date();
+                let totalElapsedMs = now.getTime() - sessionStartTime.getTime();
+                
+                // Subtract completed pause intervals
+                let totalPausedMs = 0;
+                if (activeSession.pausedIntervals && Array.isArray(activeSession.pausedIntervals)) {
+                    for (const interval of activeSession.pausedIntervals) {
+                        if (interval.pausedAt && interval.resumedAt) {
+                            const pausedMs = new Date(interval.resumedAt).getTime() - new Date(interval.pausedAt).getTime();
+                            totalPausedMs += pausedMs;
+                        }
+                    }
+                }
+                
+                elapsedSeconds = Math.floor((totalElapsedMs - totalPausedMs) / 1000);
             }
             
             // Ensure elapsed time is reasonable (not negative or excessively large)
@@ -2238,11 +2259,6 @@ class TaskPacksApp {
             elapsedSeconds = Math.max(0, Math.min(elapsedSeconds, 8 * 60 * 60));
             
             this.timerElapsed = elapsedSeconds;
-            
-            // Check if currently in a paused state
-            const lastPause = activeSession.pausedIntervals && activeSession.pausedIntervals.length > 0 ? 
-                activeSession.pausedIntervals[activeSession.pausedIntervals.length - 1] : null;
-            const isCurrentlyPaused = lastPause && lastPause.pausedAt && !lastPause.resumedAt;
             
             if (isCurrentlyPaused || activeSession.status === 'paused') {
                 this.timerPaused = true;
