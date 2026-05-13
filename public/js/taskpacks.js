@@ -2897,20 +2897,18 @@ class TaskPacksApp {
             }
             
             if (isEdit) {
-                const index = this.reminders.findIndex(r => r.id === reminderId);
+                const index = this.db.reminders.findIndex(r => r.id === reminderId);
                 if (index !== -1) {
-                    this.reminders[index] = reminderData;
                     this.db.reminders[index] = reminderData;
                 }
             } else {
-                this.reminders.push(reminderData);
                 this.db.reminders.push(reminderData);
             }
             
             await this.saveDatabase();
             
-            // Reload reminders from database to avoid duplicates
-            this.reminders = this.db.reminders;
+            // Reload reminders from database to ensure consistency
+            this.reminders = [...this.db.reminders];
             
             this.renderReminders();
             this.hideReminderModal();
@@ -2979,11 +2977,13 @@ class TaskPacksApp {
                 this.reminderTimers.delete(reminderId);
             }
             
-            // Remove from both local array and database
-            this.reminders = this.reminders.filter(r => r.id !== reminderId);
+            // Remove from database only, then sync local array
             this.db.reminders = this.db.reminders.filter(r => r.id !== reminderId);
             
             await this.saveDatabase();
+            
+            // Reload reminders from database to ensure consistency
+            this.reminders = [...this.db.reminders];
             this.renderReminders();
             this.setStatus('Reminder deleted');
         } catch (error) {
@@ -3014,15 +3014,15 @@ class TaskPacksApp {
             // Show notification
             await this.showReminderNotification(reminder);
             
-            // Mark as completed
-            reminder.status = 'completed';
-            reminder.completedAt = new Date().toISOString();
-            
-            const index = this.reminders.findIndex(r => r.id === reminder.id);
+            // Mark as completed in database
+            const index = this.db.reminders.findIndex(r => r.id === reminder.id);
             if (index !== -1) {
-                this.reminders[index] = reminder;
-                this.db.reminders[index] = reminder;
+                this.db.reminders[index].status = 'completed';
+                this.db.reminders[index].completedAt = new Date().toISOString();
                 await this.saveDatabase();
+                
+                // Reload reminders from database to ensure consistency
+                this.reminders = [...this.db.reminders];
             }
             
             // Clean up timer
