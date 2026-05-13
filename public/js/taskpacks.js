@@ -681,13 +681,19 @@ class TaskPacksApp {
     }
     
     renderTasksForCreate(tasks) {
-        this.elements.availableTasks.innerHTML = tasks.map(task => `
-            <div class="task-item" data-task-id="${task.id}">
-                <input type="checkbox" class="task-checkbox" value="${task.id}">
-                <div class="task-item-title">${this.escapeHtml(task.title || `Task ${task.id}`)}</div>
-                <div class="task-item-meta">Project: ${task.project_id || 'None'}</div>
-            </div>
-        `).join('');
+        this.elements.availableTasks.innerHTML = tasks.map(task => {
+            const labelColor = this.getTaskLabelColor(task);
+            const textColor = labelColor ? this.getTextColorForBackground(labelColor) : '';
+            const styleAttr = labelColor ? `style="background-color: ${labelColor}; color: ${textColor};"` : '';
+            
+            return `
+                <div class="task-item" data-task-id="${task.id}" ${styleAttr}>
+                    <input type="checkbox" class="task-checkbox" value="${task.id}">
+                    <div class="task-item-title">${this.escapeHtml(task.title || `Task ${task.id}`)}</div>
+                    <div class="task-item-meta">Project: ${task.project_id || 'None'}</div>
+                </div>
+            `;
+        }).join('');
         
         // Add click handlers
         this.elements.availableTasks.querySelectorAll('.task-item').forEach(item => {
@@ -758,8 +764,15 @@ class TaskPacksApp {
             
             this.setStatus('Creating pack...');
             
+            // Get earliest task for label and due date inheritance
+            const selectedTaskObjects = selectedTasks.map(id => 
+                this.allTasks.find(t => t.id === id)
+            ).filter(Boolean);
+            
+            const earliestTask = this.getEarliestTask(selectedTaskObjects);
+            
             // Create parent task in Vikunja
-            const parentTask = await this.createVikunjaParentTask(title, description);
+            const parentTask = await this.createVikunjaParentTask(title, description, earliestTask);
             
             // Assign subtasks
             await this.assignSubtasks(parentTask.id, selectedTasks);
@@ -796,12 +809,24 @@ class TaskPacksApp {
         }
     }
     
-    async createVikunjaParentTask(title, description) {
+    async createVikunjaParentTask(title, description, earliestTask = null) {
         const taskData = {
             title,
             description: description || `Task Pack created on ${this.currentDate}`,
             project_id: this.config.taskPacksProjectId
         };
+        
+        // Inherit label from earliest task
+        if (earliestTask && earliestTask.labels && earliestTask.labels.length > 0) {
+            taskData.labels = [earliestTask.labels[0]]; // Use first label
+        }
+        
+        // Set due date one minute before earliest task
+        if (earliestTask && earliestTask.due_date) {
+            const earliestDueDate = new Date(earliestTask.due_date);
+            const parentDueDate = new Date(earliestDueDate.getTime() - 60000); // Subtract 1 minute
+            taskData.due_date = parentDueDate.toISOString();
+        }
         
         const response = await fetch('/api/tasks', {
             method: 'PUT',
@@ -2156,6 +2181,67 @@ class TaskPacksApp {
             console.error('Failed to complete session:', error);
             this.setStatus('Failed to complete session', 'error');
         }
+    }
+    
+    // Task utility methods
+    getTaskLabelColor(task) {
+        if (!task.labels || !Array.isArray(task.labels) || task.labels.length === 0) {
+            return null;
+        }
+        
+        // Use the first label's color
+        const firstLabel = task.labels[0];
+        const color = firstLabel.hex_color || firstLabel.color;
+        
+        if (!color) return null;
+        
+        return color.startsWith('#') ? color : `#${color}`;
+    }
+    
+    getRelativeLuminance(hexColor) {
+        if (!hexColor) return 0;
+        
+        // Remove # if present
+        const hex = hexColor.replace('#', '');
+        
+        // Parse RGB values
+        const r = parseInt(hex.substr(0, 2), 16);
+        const g = parseInt(hex.substr(2, 2), 16);
+        const b = parseInt(hex.substr(4, 2), 16);
+        
+        // Convert to 0-1 range
+        const rNorm = r / 255;
+        const gNorm = g / 255;
+        const bNorm = b / 255;
+        
+        // Apply gamma correction
+        const rLinear = rNorm <= 0.03928 ? rNorm / 12.92 : Math.pow((rNorm + 0.055) / 1.055, 2.4);
+        const gLinear = gNorm <= 0.03928 ? gNorm / 12.92 : Math.pow((gNorm + 0.055) / 1.055, 2.4);
+        const bLinear = bNorm <= 0.03928 ? bNorm / 12.92 : Math.pow((bNorm + 0.055) / 1.055, 2.4);
+        
+        // Calculate relative luminance
+        return 0.2126 * rLinear + 0.7152 * gLinear + 0.0722 * bLinear;
+    }
+    
+    getTextColorForBackground(backgroundColor) {
+        const luminance = this.getRelativeLuminance(backgroundColor);
+        return luminance > 0.55 ? '#000000' : '#ffffff';
+    }
+    
+    getEarliestTask(tasks) {
+        if (!tasks || tasks.length === 0) return null;
+        
+        // Filter tasks that have due dates
+        const tasksWithDueDates = tasks.filter(task => task.due_date);
+        
+        if (tasksWithDueDates.length === 0) return null;
+        
+        // Find the task with the earliest due date
+        return tasksWithDueDates.reduce((earliest, current) => {
+            const earliestDate = new Date(earliest.due_date);
+            const currentDate = new Date(current.due_date);
+            return currentDate < earliestDate ? current : earliest;
+        });
     }
     
     // Utility methods
