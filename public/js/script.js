@@ -970,7 +970,12 @@ function ensureCalendar() {
         arg.el.style.borderColor = c;
         
         // Set text color based on background brightness
+        const brightness = getPerceivedBrightness(c);
         const textColor = getTextColorForBackground(c);
+        
+        // Console log the calendar item name and YIQ brightness
+        console.log(`Calendar item: "${arg.event.title}" | Background color: ${c} | YIQ brightness: ${brightness} | Text color: ${textColor}`);
+        
         arg.el.style.color = textColor;
         
         // Also apply to child elements that contain text
