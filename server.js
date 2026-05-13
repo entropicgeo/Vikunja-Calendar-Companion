@@ -357,42 +357,6 @@ app.get('/api/projects', async (req, res) => {
   }
 });
 
-// Labels endpoint for Task Packs (different from the existing one to avoid conflicts)
-app.get('/api/labels', async (req, res) => {
-  try {
-    const baseUrl = process.env.API_BASE_URL;
-    const token = process.env.API_TOKEN;
-    const page = req.query.page || 1;
-    const perPage = req.query.per_page || 50;
-    
-    if (!baseUrl || !token) {
-      return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
-    }
-    
-    const url = new URL(`${baseUrl}/api/v1/labels`);
-    url.searchParams.set('page', String(page));
-    url.searchParams.set('per_page', String(perPage));
-    
-    const response = await fetch(url.toString(), {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      }
-    });
-    
-    if (response.ok) {
-      const labels = await response.json();
-      res.json(labels);
-    } else {
-      const text = await response.text();
-      res.status(response.status).send(text);
-    }
-  } catch (error) {
-    console.error('Error fetching labels:', error);
-    res.status(500).json({ error: 'Failed to fetch labels' });
-  }
-});
 
 // Create task endpoint (for creating parent tasks)
 app.put('/api/tasks', async (req, res) => {
@@ -407,11 +371,12 @@ app.put('/api/tasks', async (req, res) => {
       return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
     }
     
-    const url = `${baseUrl}/api/v1/tasks`;
+    // Try the projects endpoint for task creation instead
+    const url = `${baseUrl}/api/v1/projects/${payload.project_id}/tasks`;
     console.log('Making request to:', url);
     
     const response = await fetch(url, {
-      method: 'POST',
+      method: 'PUT',
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
