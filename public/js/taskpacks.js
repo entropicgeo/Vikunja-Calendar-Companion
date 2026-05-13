@@ -2238,6 +2238,14 @@ class TaskPacksApp {
                 this.activeSession.status = 'paused';
                 
                 this.showActivePackPanel();
+                
+                // Set up paused UI state
+                this.elements.pauseBtn.style.display = 'none';
+                this.elements.resumeBtn.style.display = 'inline-block';
+                this.elements.timerStatus.textContent = 'Paused';
+                
+                // Update timer display for paused state
+                this.updateTimerDisplay();
             } else {
                 // If running, calculate current elapsed time
                 totalElapsedSeconds -= totalPausedSeconds;
