@@ -192,7 +192,7 @@ app.post('/api/tasks/:taskId', async (req, res) => {
     const baseUrl = process.env.API_BASE_URL;
     const token = process.env.API_TOKEN;
     const taskId = req.params.taskId;
-    const payload = req.body;
+    const updates = req.body;
     
     if (!baseUrl || !token) {
       return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
@@ -200,6 +200,26 @@ app.post('/api/tasks/:taskId', async (req, res) => {
     
     const url = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`;
     
+    // First, fetch the current task to get all existing data
+    const getResponse = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!getResponse.ok) {
+      const text = await getResponse.text();
+      return res.status(getResponse.status).send(text);
+    }
+    
+    const currentTask = await getResponse.json();
+    
+    // Merge the updates with the current task data
+    const fullPayload = { ...currentTask, ...updates };
+    
+    // Now send the complete task data to Vikunja
     const response = await fetch(url, {
       method: 'POST',
       headers: {
@@ -207,7 +227,7 @@ app.post('/api/tasks/:taskId', async (req, res) => {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(fullPayload)
     });
     
     if (!response.ok) {
