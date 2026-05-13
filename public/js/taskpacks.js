@@ -682,6 +682,11 @@ class TaskPacksApp {
             filtered = filtered.filter(task => !assignedTaskIds.has(task.id));
         }
         
+        // Always exclude task pack parent tasks (tasks in task pack project with no parent)
+        if (this.config.taskPacksProjectId) {
+            filtered = filtered.filter(task => !this.isTaskPackParentTask(task));
+        }
+        
         // Sort by due date chronologically, then by title
         filtered.sort((a, b) => {
             // First sort by due date
@@ -2283,6 +2288,28 @@ class TaskPacksApp {
         });
         
         return assignedTaskIds;
+    }
+    
+    isTaskPackParentTask(task) {
+        // A task pack parent task is:
+        // 1. In the task pack project
+        // 2. Has no parent task (no parent relations)
+        if (task.project_id !== this.config.taskPacksProjectId) {
+            return false;
+        }
+        
+        // Check if task has any parent relations
+        // In Vikunja, this would be in the related_tasks field or similar
+        if (task.related_tasks && Array.isArray(task.related_tasks)) {
+            const hasParent = task.related_tasks.some(relation => 
+                relation.relation_kind === 'parenttask' || relation.relation_kind === 'parent'
+            );
+            return !hasParent;
+        }
+        
+        // If no related_tasks field, assume it's a potential parent task
+        // (this is a conservative approach - we exclude it to be safe)
+        return true;
     }
     
     // Utility methods
