@@ -2206,34 +2206,25 @@ class TaskPacksApp {
             
             this.activeSession = activeSession;
             
-            // Use stored elapsed time if available, otherwise calculate from start time
+            // Use stored elapsed time if available, otherwise start fresh
             let elapsedSeconds = 0;
             
-            if (activeSession.currentElapsedSeconds !== undefined) {
+            if (activeSession.currentElapsedSeconds !== undefined && activeSession.currentElapsedSeconds >= 0) {
                 // Use the stored elapsed time from the last sync
                 elapsedSeconds = activeSession.currentElapsedSeconds;
-            } else if (activeSession.totalElapsedSeconds !== undefined) {
+            } else if (activeSession.totalElapsedSeconds !== undefined && activeSession.totalElapsedSeconds >= 0) {
                 // Fall back to total elapsed seconds
                 elapsedSeconds = activeSession.totalElapsedSeconds;
             } else {
-                // Last resort: calculate from session start time (but this is less reliable)
-                const sessionStartTime = new Date(activeSession.startedAt);
-                const now = new Date();
-                elapsedSeconds = Math.floor((now.getTime() - sessionStartTime.getTime()) / 1000);
-                
-                // Subtract completed pause intervals
-                if (activeSession.pausedIntervals && Array.isArray(activeSession.pausedIntervals)) {
-                    for (const interval of activeSession.pausedIntervals) {
-                        if (interval.pausedAt && interval.resumedAt) {
-                            const pausedMs = new Date(interval.resumedAt).getTime() - new Date(interval.pausedAt).getTime();
-                            elapsedSeconds -= Math.floor(pausedMs / 1000);
-                        }
-                    }
-                }
+                // If no stored time is available, start fresh rather than calculating from start time
+                // This prevents huge numbers when sessions are restored after long periods
+                console.warn('No stored elapsed time found for session, starting timer from 0');
+                elapsedSeconds = 0;
             }
             
             // Ensure elapsed time is reasonable (not negative or excessively large)
-            elapsedSeconds = Math.max(0, Math.min(elapsedSeconds, 24 * 60 * 60)); // Cap at 24 hours
+            // Cap at 8 hours as a more reasonable maximum for a work session
+            elapsedSeconds = Math.max(0, Math.min(elapsedSeconds, 8 * 60 * 60));
             
             this.timerElapsed = elapsedSeconds;
             
