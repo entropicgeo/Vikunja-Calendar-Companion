@@ -18,6 +18,7 @@ class TaskPacksApp {
         this.taskReloadTimer = null;
         this.selectedPackTasks = new Set();
         this.completedSession = null; // Store completed session for rating
+        this.sessionSyncTimer = null; // Timer for syncing session state
         
         this.elements = {
             packDate: document.getElementById('pack-date'),
@@ -526,6 +527,9 @@ class TaskPacksApp {
             
             // Load packs for current date
             await this.loadPacksForDate();
+            
+            // Check for active session and restore timer state
+            await this.restoreActiveSession();
             
             this.setStatus('Data loaded successfully');
         } catch (error) {
@@ -1058,6 +1062,9 @@ class TaskPacksApp {
             this.activeSession = session;
             this.sessions = this.db.activitySessions;
             
+            // Sync session state to database immediately
+            await this.syncSessionState();
+            
             this.showActivePackPanel();
             this.startTimer();
             this.loadPacksForDate();
@@ -1085,12 +1092,14 @@ class TaskPacksApp {
         this.updateBreakInfo();
         this.loadActivePackTasks();
         this.startTaskReloadTimer();
+        this.startSessionSyncTimer();
     }
     
     hideActivePackPanel() {
         this.elements.activePackPanel.style.display = 'none';
         this.stopTimer();
         this.stopTaskReloadTimer();
+        this.stopSessionSyncTimer();
         this.selectedPackTasks.clear();
     }
     
@@ -1139,6 +1148,7 @@ class TaskPacksApp {
         });
         
         this.activeSession.status = 'paused';
+        await this.syncSessionState();
         this.saveDatabase();
         
         this.elements.pauseBtn.style.display = 'none';
@@ -1158,6 +1168,7 @@ class TaskPacksApp {
         }
         
         this.activeSession.status = 'running';
+        await this.syncSessionState();
         this.saveDatabase();
         
         this.startTimer();
@@ -1195,7 +1206,16 @@ class TaskPacksApp {
     }
     
     updateTimerDisplay() {
-        if (this.timerPaused) return;
+        if (this.timerPaused) {
+            // For paused sessions, just display the stored elapsed time
+            const hours = Math.floor(this.timerElapsed / 3600);
+            const minutes = Math.floor((this.timerElapsed % 3600) / 60);
+            const seconds = this.timerElapsed % 60;
+            
+            const timeStr = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            this.elements.timerDisplay.textContent = timeStr;
+            return;
+        }
         
         this.timerElapsed = Math.floor((Date.now() - this.timerStartTime) / 1000);
         
@@ -2130,6 +2150,99 @@ class TaskPacksApp {
         if (this.taskReloadTimer) {
             clearInterval(this.taskReloadTimer);
             this.taskReloadTimer = null;
+        }
+    }
+    
+    // Session sync timer for persistence
+    startSessionSyncTimer() {
+        if (this.sessionSyncTimer) return;
+        
+        // Sync session state every 10 seconds
+        this.sessionSyncTimer = setInterval(() => {
+            if (this.activeSession) {
+                this.syncSessionState();
+            }
+        }, 10000);
+    }
+    
+    stopSessionSyncTimer() {
+        if (this.sessionSyncTimer) {
+            clearInterval(this.sessionSyncTimer);
+            this.sessionSyncTimer = null;
+        }
+    }
+    
+    async syncSessionState() {
+        if (!this.activeSession) return;
+        
+        try {
+            // Update session with current timer state
+            this.activeSession.totalElapsedSeconds = this.timerElapsed;
+            this.activeSession.activeElapsedSeconds = this.calculateActiveElapsed();
+            this.activeSession.lastSyncAt = new Date().toISOString();
+            
+            // If timer is running, store the current start time for restoration
+            if (!this.timerPaused && this.timerStartTime) {
+                this.activeSession.timerStartTime = this.timerStartTime;
+                this.activeSession.timerElapsed = this.timerElapsed;
+            }
+            
+            // Update the session in the database
+            const sessionIndex = this.db.activitySessions.findIndex(s => s.id === this.activeSession.id);
+            if (sessionIndex !== -1) {
+                this.db.activitySessions[sessionIndex] = { ...this.activeSession };
+                await this.saveDatabase();
+            }
+        } catch (error) {
+            console.error('Failed to sync session state:', error);
+        }
+    }
+    
+    async restoreActiveSession() {
+        try {
+            // Look for any running or paused sessions
+            const activeSession = this.sessions.find(session => 
+                session.status === 'running' || session.status === 'paused'
+            );
+            
+            if (!activeSession) return;
+            
+            this.activeSession = activeSession;
+            
+            // Restore timer state if session was running
+            if (activeSession.status === 'running') {
+                // Calculate elapsed time since last sync
+                const lastSyncTime = activeSession.lastSyncAt ? new Date(activeSession.lastSyncAt) : new Date(activeSession.startedAt);
+                const now = new Date();
+                const timeSinceSync = Math.floor((now.getTime() - lastSyncTime.getTime()) / 1000);
+                
+                // Restore timer state
+                this.timerElapsed = (activeSession.timerElapsed || 0) + timeSinceSync;
+                this.timerPaused = false;
+                
+                // Account for any paused time that wasn't resumed
+                const lastPause = activeSession.pausedIntervals[activeSession.pausedIntervals.length - 1];
+                if (lastPause && lastPause.pausedAt && !lastPause.resumedAt) {
+                    // Session was paused but not resumed - mark as paused
+                    this.activeSession.status = 'paused';
+                    this.timerPaused = true;
+                }
+                
+                this.showActivePackPanel();
+                
+                if (!this.timerPaused) {
+                    this.startTimer();
+                }
+            } else if (activeSession.status === 'paused') {
+                // Restore paused state
+                this.timerElapsed = activeSession.timerElapsed || 0;
+                this.timerPaused = true;
+                this.showActivePackPanel();
+            }
+            
+            this.setStatus('Restored active session from previous browser session');
+        } catch (error) {
+            console.error('Failed to restore active session:', error);
         }
     }
     
