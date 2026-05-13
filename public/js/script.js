@@ -353,6 +353,26 @@ function normalizeHexColor(c) {
   return c.startsWith('#') ? c : `#${c}`;
 }
 
+function getPerceivedBrightness(hexColor) {
+  if (!hexColor) return 0;
+  
+  // Remove # if present
+  const hex = hexColor.replace('#', '');
+  
+  // Parse RGB values
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  
+  // YIQ perceived brightness formula
+  return (r * 299 + g * 587 + b * 114) / 1000;
+}
+
+function getTextColorForBackground(backgroundColor) {
+  const brightness = getPerceivedBrightness(backgroundColor);
+  return brightness > 128 ? '#000000' : '#ffffff';
+}
+
 function ensureLabelSelectionDefaults(allLabels) {
   // Any new label IDs not in the selection map default to true (included)
   for (const l of allLabels) {
@@ -948,6 +968,16 @@ function ensureCalendar() {
       if (c) {
         arg.el.style.backgroundColor = c;
         arg.el.style.borderColor = c;
+        
+        // Set text color based on background brightness
+        const textColor = getTextColorForBackground(c);
+        arg.el.style.color = textColor;
+        
+        // Also apply to child elements that contain text
+        const textElements = arg.el.querySelectorAll('.fc-event-title, .fc-event-time, .fc-list-event-title, .fc-list-event-time');
+        textElements.forEach(el => {
+          el.style.color = textColor;
+        });
       }
       arg.el.style.borderRadius = '10px';
       arg.el.style.borderWidth = '1px';
