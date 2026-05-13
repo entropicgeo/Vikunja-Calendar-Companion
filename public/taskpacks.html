@@ -330,30 +330,79 @@
                 <button class="modal-close" id="rating-modal-close">&times;</button>
             </div>
             <form id="rating-form">
-                <div class="form-group">
-                    <label>Helpfulness (1-5):</label>
-                    <div class="rating-scale">
-                        <input type="radio" name="helpfulness" value="1" id="help1"><label for="help1">1</label>
-                        <input type="radio" name="helpfulness" value="2" id="help2"><label for="help2">2</label>
-                        <input type="radio" name="helpfulness" value="3" id="help3"><label for="help3">3</label>
-                        <input type="radio" name="helpfulness" value="4" id="help4"><label for="help4">4</label>
-                        <input type="radio" name="helpfulness" value="5" id="help5"><label for="help5">5</label>
+                <div class="rating-section">
+                    <h4>Overall Session Rating</h4>
+                    <div class="form-group">
+                        <label>Helpfulness (1-5):</label>
+                        <div class="rating-scale">
+                            <input type="radio" name="helpfulness" value="1" id="help1"><label for="help1">1</label>
+                            <input type="radio" name="helpfulness" value="2" id="help2"><label for="help2">2</label>
+                            <input type="radio" name="helpfulness" value="3" id="help3"><label for="help3">3</label>
+                            <input type="radio" name="helpfulness" value="4" id="help4"><label for="help4">4</label>
+                            <input type="radio" name="helpfulness" value="5" id="help5"><label for="help5">5</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Timing Fit (1-5):</label>
+                        <div class="rating-scale">
+                            <input type="radio" name="timingFit" value="1" id="timing1"><label for="timing1">1</label>
+                            <input type="radio" name="timingFit" value="2" id="timing2"><label for="timing2">2</label>
+                            <input type="radio" name="timingFit" value="3" id="timing3"><label for="timing3">3</label>
+                            <input type="radio" name="timingFit" value="4" id="timing4"><label for="timing4">4</label>
+                            <input type="radio" name="timingFit" value="5" id="timing5"><label for="timing5">5</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="rating-notes">Overall Notes:</label>
+                        <textarea id="rating-notes" rows="3"></textarea>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label>Timing Fit (1-5):</label>
-                    <div class="rating-scale">
-                        <input type="radio" name="timingFit" value="1" id="timing1"><label for="timing1">1</label>
-                        <input type="radio" name="timingFit" value="2" id="timing2"><label for="timing2">2</label>
-                        <input type="radio" name="timingFit" value="3" id="timing3"><label for="timing3">3</label>
-                        <input type="radio" name="timingFit" value="4" id="timing4"><label for="timing4">4</label>
-                        <input type="radio" name="timingFit" value="5" id="timing5"><label for="timing5">5</label>
+
+                <div class="rating-section" id="context-rating-section">
+                    <h4>Activity Context Rating</h4>
+                    <div class="context-info" id="context-rating-info"></div>
+                    <div class="form-group">
+                        <label>Context Fit (1-5):</label>
+                        <div class="rating-scale">
+                            <input type="radio" name="contextFit" value="1" id="context1"><label for="context1">1</label>
+                            <input type="radio" name="contextFit" value="2" id="context2"><label for="context2">2</label>
+                            <input type="radio" name="contextFit" value="3" id="context3"><label for="context3">3</label>
+                            <input type="radio" name="contextFit" value="4" id="context4"><label for="context4">4</label>
+                            <input type="radio" name="contextFit" value="5" id="context5"><label for="context5">5</label>
+                        </div>
+                        <small>How well did the selected break strategies work for this activity context?</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="context-rating-notes">Context Notes:</label>
+                        <textarea id="context-rating-notes" rows="2" placeholder="Notes about this context and break strategy combination..."></textarea>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label for="rating-notes">Notes:</label>
-                    <textarea id="rating-notes" rows="3"></textarea>
+
+                <div class="rating-section" id="label-rating-section">
+                    <h4>Task Type Rating</h4>
+                    <div class="label-info" id="label-rating-info"></div>
+                    <div class="form-group">
+                        <label>Task Type Fit (1-5):</label>
+                        <div class="rating-scale">
+                            <input type="radio" name="labelFit" value="1" id="label1"><label for="label1">1</label>
+                            <input type="radio" name="labelFit" value="2" id="label2"><label for="label2">2</label>
+                            <input type="radio" name="labelFit" value="3" id="label3"><label for="label3">3</label>
+                            <input type="radio" name="labelFit" value="4" id="label4"><label for="label4">4</label>
+                            <input type="radio" name="labelFit" value="5" id="label5"><label for="label5">5</label>
+                        </div>
+                        <small>How well did the break strategies work for this type of task?</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="label-rating-notes">Task Type Notes:</label>
+                        <textarea id="label-rating-notes" rows="2" placeholder="Notes about how strategies worked for this task type..."></textarea>
+                    </div>
                 </div>
+
+                <div class="rating-section" id="strategy-ratings-section">
+                    <h4>Individual Break Strategy Ratings</h4>
+                    <div id="individual-strategy-ratings"></div>
+                </div>
+
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Save Rating</button>
                     <button type="button" class="btn btn-secondary" id="rating-cancel">Cancel</button>

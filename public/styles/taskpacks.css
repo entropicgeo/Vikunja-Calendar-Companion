@@ -731,6 +731,93 @@
     border-color: var(--primary);
 }
 
+/* Rating sections */
+.rating-section {
+    margin-bottom: 25px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.rating-section:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.rating-section h4 {
+    margin: 0 0 15px 0;
+    color: var(--text-primary);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.context-info,
+.label-info {
+    background: var(--hover-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    margin-bottom: 15px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.context-info strong,
+.label-info strong {
+    color: var(--text-primary);
+}
+
+.individual-strategy-rating {
+    background: var(--hover-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+
+.strategy-rating-header {
+    margin-bottom: 12px;
+}
+
+.strategy-rating-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.strategy-rating-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.strategy-rating-fields {
+    display: grid;
+    gap: 12px;
+}
+
+.strategy-rating-row {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.strategy-rating-row label {
+    min-width: 120px;
+    font-size: 13px;
+    margin: 0;
+}
+
+.strategy-rating-row .rating-scale {
+    gap: 8px;
+}
+
+.strategy-rating-row .rating-scale label {
+    min-width: auto;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
 /* Config Section */
 .config-section {
     background: var(--card-bg);

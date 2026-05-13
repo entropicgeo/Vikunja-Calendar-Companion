@@ -1389,6 +1389,7 @@ class TaskPacksApp {
     
     // Rating Modal
     showRatingModal() {
+        this.populateRatingModal();
         this.elements.ratingModal.classList.add('show');
     }
     
@@ -1397,28 +1398,197 @@ class TaskPacksApp {
         this.elements.ratingForm.reset();
     }
     
+    populateRatingModal() {
+        if (!this.activeSession) return;
+        
+        const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
+        if (!pack) return;
+        
+        // Populate activity context info
+        const context = this.contexts.find(c => c.id === pack.activityContextId);
+        const contextInfo = document.getElementById('context-rating-info');
+        if (context) {
+            contextInfo.innerHTML = `<strong>Context:</strong> ${this.escapeHtml(context.name)} (${context.activityType.replace('_', ' ')})`;
+            document.getElementById('context-rating-section').style.display = 'block';
+        } else {
+            document.getElementById('context-rating-section').style.display = 'none';
+        }
+        
+        // Populate label info
+        const packLabel = this.getPackLabel(pack);
+        const labelInfo = document.getElementById('label-rating-info');
+        if (packLabel) {
+            const labelColor = packLabel.hex_color || packLabel.color;
+            const colorStyle = labelColor ? `style="background-color: ${labelColor.startsWith('#') ? labelColor : '#' + labelColor}; color: ${this.getTextColorForBackground(labelColor)}; padding: 2px 8px; border-radius: 12px; font-size: 11px;"` : '';
+            labelInfo.innerHTML = `<strong>Task Type:</strong> <span ${colorStyle}>${this.escapeHtml(packLabel.title || 'Label')}</span>`;
+            document.getElementById('label-rating-section').style.display = 'block';
+        } else {
+            document.getElementById('label-rating-section').style.display = 'none';
+        }
+        
+        // Populate individual strategy ratings
+        this.populateIndividualStrategyRatings();
+    }
+    
+    populateIndividualStrategyRatings() {
+        if (!this.activeSession) return;
+        
+        const strategies = this.activeSession.breakStrategyIds.map(id =>
+            this.strategies.find(s => s.id === id)
+        ).filter(Boolean);
+        
+        const container = document.getElementById('individual-strategy-ratings');
+        
+        if (strategies.length === 0) {
+            container.innerHTML = '<div class="loading">No break strategies were used in this session</div>';
+            return;
+        }
+        
+        container.innerHTML = strategies.map((strategy, index) => `
+            <div class="individual-strategy-rating">
+                <div class="strategy-rating-header">
+                    <div class="strategy-rating-name">${this.escapeHtml(strategy.name)}</div>
+                    <div class="strategy-rating-meta">
+                        ${strategy.breakType.replace('_', ' ')} • Every ${strategy.intervalMinutes} minutes • ${strategy.suggestedDurationSeconds}s
+                    </div>
+                </div>
+                <div class="strategy-rating-fields">
+                    <div class="strategy-rating-row">
+                        <label>Effectiveness:</label>
+                        <div class="rating-scale">
+                            <input type="radio" name="strategy_${index}_effectiveness" value="1" id="strat_${index}_eff1"><label for="strat_${index}_eff1">1</label>
+                            <input type="radio" name="strategy_${index}_effectiveness" value="2" id="strat_${index}_eff2"><label for="strat_${index}_eff2">2</label>
+                            <input type="radio" name="strategy_${index}_effectiveness" value="3" id="strat_${index}_eff3"><label for="strat_${index}_eff3">3</label>
+                            <input type="radio" name="strategy_${index}_effectiveness" value="4" id="strat_${index}_eff4"><label for="strat_${index}_eff4">4</label>
+                            <input type="radio" name="strategy_${index}_effectiveness" value="5" id="strat_${index}_eff5"><label for="strat_${index}_eff5">5</label>
+                        </div>
+                    </div>
+                    <div class="strategy-rating-row">
+                        <label>Ease of Use:</label>
+                        <div class="rating-scale">
+                            <input type="radio" name="strategy_${index}_ease" value="1" id="strat_${index}_ease1"><label for="strat_${index}_ease1">1</label>
+                            <input type="radio" name="strategy_${index}_ease" value="2" id="strat_${index}_ease2"><label for="strat_${index}_ease2">2</label>
+                            <input type="radio" name="strategy_${index}_ease" value="3" id="strat_${index}_ease3"><label for="strat_${index}_ease3">3</label>
+                            <input type="radio" name="strategy_${index}_ease" value="4" id="strat_${index}_ease4"><label for="strat_${index}_ease4">4</label>
+                            <input type="radio" name="strategy_${index}_ease" value="5" id="strat_${index}_ease5"><label for="strat_${index}_ease5">5</label>
+                        </div>
+                    </div>
+                    <div class="strategy-rating-row">
+                        <label>Timing:</label>
+                        <div class="rating-scale">
+                            <input type="radio" name="strategy_${index}_timing" value="1" id="strat_${index}_time1"><label for="strat_${index}_time1">1</label>
+                            <input type="radio" name="strategy_${index}_timing" value="2" id="strat_${index}_time2"><label for="strat_${index}_time2">2</label>
+                            <input type="radio" name="strategy_${index}_timing" value="3" id="strat_${index}_time3"><label for="strat_${index}_time3">3</label>
+                            <input type="radio" name="strategy_${index}_timing" value="4" id="strat_${index}_time4"><label for="strat_${index}_time4">4</label>
+                            <input type="radio" name="strategy_${index}_timing" value="5" id="strat_${index}_time5"><label for="strat_${index}_time5">5</label>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="strategy_${index}_notes">Strategy Notes:</label>
+                        <textarea id="strategy_${index}_notes" rows="2" placeholder="Notes about this specific strategy..." data-strategy-id="${strategy.id}"></textarea>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+    
     async saveRating() {
         try {
+            if (!this.activeSession) return;
+            
+            const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
+            if (!pack) return;
+            
+            const ratings = [];
+            
+            // Overall session rating
             const helpfulness = document.querySelector('input[name="helpfulness"]:checked')?.value;
             const timingFit = document.querySelector('input[name="timingFit"]:checked')?.value;
             const notes = document.getElementById('rating-notes').value.trim();
             
-            const rating = {
-                id: this.generateId(),
-                taskPackId: this.activeSession?.taskPackId,
-                activitySessionId: this.activeSession?.id,
-                ratingType: 'overall_pack_strategy',
-                helpfulness: helpfulness ? parseInt(helpfulness) : null,
-                timingFit: timingFit ? parseInt(timingFit) : null,
-                notes,
-                createdAt: new Date().toISOString()
-            };
+            if (helpfulness || timingFit || notes) {
+                ratings.push({
+                    id: this.generateId(),
+                    taskPackId: this.activeSession.taskPackId,
+                    activitySessionId: this.activeSession.id,
+                    ratingType: 'overall_pack_strategy',
+                    helpfulness: helpfulness ? parseInt(helpfulness) : null,
+                    timingFit: timingFit ? parseInt(timingFit) : null,
+                    notes,
+                    createdAt: new Date().toISOString()
+                });
+            }
             
-            this.db.strategyRatings.push(rating);
+            // Activity context rating
+            const contextFit = document.querySelector('input[name="contextFit"]:checked')?.value;
+            const contextNotes = document.getElementById('context-rating-notes').value.trim();
+            
+            if ((contextFit || contextNotes) && pack.activityContextId) {
+                ratings.push({
+                    id: this.generateId(),
+                    taskPackId: this.activeSession.taskPackId,
+                    activitySessionId: this.activeSession.id,
+                    activityContextId: pack.activityContextId,
+                    ratingType: 'activity_context_fit',
+                    contextFit: contextFit ? parseInt(contextFit) : null,
+                    notes: contextNotes,
+                    createdAt: new Date().toISOString()
+                });
+            }
+            
+            // Task type (label) rating
+            const labelFit = document.querySelector('input[name="labelFit"]:checked')?.value;
+            const labelNotes = document.getElementById('label-rating-notes').value.trim();
+            const packLabel = this.getPackLabel(pack);
+            
+            if ((labelFit || labelNotes) && packLabel) {
+                ratings.push({
+                    id: this.generateId(),
+                    taskPackId: this.activeSession.taskPackId,
+                    activitySessionId: this.activeSession.id,
+                    labelId: packLabel.id,
+                    ratingType: 'task_type_fit',
+                    labelFit: labelFit ? parseInt(labelFit) : null,
+                    notes: labelNotes,
+                    createdAt: new Date().toISOString()
+                });
+            }
+            
+            // Individual strategy ratings
+            const strategies = this.activeSession.breakStrategyIds.map(id =>
+                this.strategies.find(s => s.id === id)
+            ).filter(Boolean);
+            
+            strategies.forEach((strategy, index) => {
+                const effectiveness = document.querySelector(`input[name="strategy_${index}_effectiveness"]:checked`)?.value;
+                const ease = document.querySelector(`input[name="strategy_${index}_ease"]:checked`)?.value;
+                const timing = document.querySelector(`input[name="strategy_${index}_timing"]:checked`)?.value;
+                const strategyNotes = document.getElementById(`strategy_${index}_notes`).value.trim();
+                
+                if (effectiveness || ease || timing || strategyNotes) {
+                    ratings.push({
+                        id: this.generateId(),
+                        taskPackId: this.activeSession.taskPackId,
+                        activitySessionId: this.activeSession.id,
+                        breakStrategyId: strategy.id,
+                        activityContextId: pack.activityContextId,
+                        labelId: packLabel?.id || null,
+                        ratingType: 'break_strategy',
+                        effectiveness: effectiveness ? parseInt(effectiveness) : null,
+                        ease: ease ? parseInt(ease) : null,
+                        timing: timing ? parseInt(timing) : null,
+                        notes: strategyNotes,
+                        createdAt: new Date().toISOString()
+                    });
+                }
+            });
+            
+            // Save all ratings
+            this.db.strategyRatings.push(...ratings);
             await this.saveDatabase();
             
             this.hideRatingModal();
-            this.setStatus('Rating saved');
+            this.setStatus(`Saved ${ratings.length} rating${ratings.length !== 1 ? 's' : ''}`);
         } catch (error) {
             console.error('Failed to save rating:', error);
             this.setStatus('Failed to save rating', 'error');
