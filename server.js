@@ -221,6 +221,45 @@ app.post('/api/tasks/:taskId', async (req, res) => {
   }
 });
 
+app.delete('/api/tasks/:taskId', async (req, res) => {
+  try {
+    const baseUrl = process.env.API_BASE_URL;
+    const token = process.env.API_TOKEN;
+    const taskId = req.params.taskId;
+    
+    if (!baseUrl || !token) {
+      return res.status(500).json({ error: 'Missing API_BASE_URL or API_TOKEN in environment variables' });
+    }
+    
+    const url = `${baseUrl}/api/v1/tasks/${encodeURIComponent(taskId)}`;
+    
+    const response = await fetch(url, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      }
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      return res.status(response.status).send(text);
+    }
+    
+    // DELETE requests often return 204 No Content
+    if (response.status === 204) {
+      res.status(204).send();
+    } else {
+      const data = await response.json();
+      res.json(data);
+    }
+  } catch (error) {
+    console.error(`Error deleting task ${req.params.taskId}:`, error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.get('/api/tasks/:taskId/comments', async (req, res) => {
   try {
     const baseUrl = process.env.API_BASE_URL;

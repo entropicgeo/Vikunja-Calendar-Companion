@@ -2035,6 +2035,20 @@ class TaskPacksApp {
         return await response.json();
     }
     
+    async deleteVikunjaTask(taskId) {
+        const response = await fetch(`/api/tasks/${taskId}`, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Failed to delete task ${taskId}: ${error}`);
+        }
+        
+        return response.status === 204 ? {} : await response.json();
+    }
+    
     // Task details modal
     async showTaskDetails(taskId) {
         try {
@@ -2405,6 +2419,28 @@ class TaskPacksApp {
         if (!confirm('Are you sure you want to delete this pack?')) return;
         
         try {
+            const pack = this.packs.find(p => p.id === packId);
+            if (!pack) {
+                this.setStatus('Pack not found', 'error');
+                return;
+            }
+            
+            // Check if pack has been run (has any sessions)
+            const hasBeenRun = this.sessions.some(session => session.taskPackId === packId);
+            
+            if (!hasBeenRun && pack.vikunjaParentTaskId) {
+                // Delete the Vikunja parent task if pack hasn't been run
+                this.setStatus('Deleting Vikunja parent task...');
+                try {
+                    await this.deleteVikunjaTask(pack.vikunjaParentTaskId);
+                    this.setStatus('Vikunja parent task deleted');
+                } catch (vikunjaError) {
+                    console.error('Failed to delete Vikunja parent task:', vikunjaError);
+                    this.setStatus('Warning: Failed to delete Vikunja parent task, but continuing with local deletion', 'warning');
+                }
+            }
+            
+            // Remove from local database
             this.db.taskPacks = this.db.taskPacks.filter(p => p.id !== packId);
             await this.saveDatabase();
             this.packs = this.db.taskPacks;
