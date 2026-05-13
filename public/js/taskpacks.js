@@ -531,11 +531,11 @@ class TaskPacksApp {
             // Start reminder checking
             this.startReminderChecker();
             
-            // Load packs for current date
-            await this.loadPacksForDate();
-            
-            // Check for active session and restore timer state
+            // Check for active session and restore timer state FIRST
             await this.restoreActiveSession();
+            
+            // Load packs for current date (this will respect existing active session)
+            await this.loadPacksForDate();
             
             this.setStatus('Data loaded successfully');
         } catch (error) {
@@ -628,20 +628,23 @@ class TaskPacksApp {
         
         this.renderPacksList(packsForDate);
         
-        // Check for active session
-        const activeSession = this.sessions.find(session => 
-            session.status === 'running' || session.status === 'paused'
-        );
-        
-        if (activeSession) {
-            this.activeSession = activeSession;
-            this.showActivePackPanel();
-            if (activeSession.status === 'running') {
-                this.startTimer();
+        // Only check for active session if we don't already have one restored
+        if (!this.activeSession) {
+            const activeSession = this.sessions.find(session => 
+                session.status === 'running' || session.status === 'paused'
+            );
+            
+            if (activeSession) {
+                this.activeSession = activeSession;
+                this.showActivePackPanel();
+                if (activeSession.status === 'running') {
+                    this.startTimer();
+                }
+            } else {
+                this.hideActivePackPanel();
             }
-        } else {
-            this.hideActivePackPanel();
         }
+        // If we already have an active session (from restoration), don't interfere with it
     }
     
     renderPacksList(packs) {
@@ -2302,8 +2305,14 @@ class TaskPacksApp {
                 
                 this.showActivePackPanel();
                 this.startTimer();
+                
+                // Force an immediate timer display update to show correct restored time
+                setTimeout(() => {
+                    this.updateTimerDisplay();
+                }, 100);
             }
             
+            console.log(`Session restoration complete: ${this.timerElapsed}s elapsed, paused: ${this.timerPaused}`);
             this.setStatus('Restored active session from previous browser session');
         } catch (error) {
             console.error('Failed to restore active session:', error);
