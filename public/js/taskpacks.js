@@ -360,6 +360,7 @@ class TaskPacksApp {
         
         this.elements.taskFilter.addEventListener('input', () => this.filterTasks());
         document.getElementById('filter-by-date').addEventListener('change', () => this.filterTasks());
+        document.getElementById('exclude-assigned-tasks').addEventListener('change', () => this.filterTasks());
         
         // Multi-select dropdowns
         this.setupMultiSelectDropdown('project');
@@ -639,6 +640,7 @@ class TaskPacksApp {
     filterTasks() {
         const filterText = this.elements.taskFilter.value.toLowerCase();
         const filterByDate = document.getElementById('filter-by-date').checked;
+        const excludeAssignedTasks = document.getElementById('exclude-assigned-tasks').checked;
         const selectedDate = this.currentDate;
         
         let filtered = [...this.allTasks];
@@ -674,8 +676,30 @@ class TaskPacksApp {
             });
         }
         
-        // Sort by title
-        filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+        // Exclude tasks already assigned to packs for this date if enabled
+        if (excludeAssignedTasks && selectedDate) {
+            const assignedTaskIds = this.getAssignedTaskIdsForDate(selectedDate);
+            filtered = filtered.filter(task => !assignedTaskIds.has(task.id));
+        }
+        
+        // Sort by due date chronologically, then by title
+        filtered.sort((a, b) => {
+            // First sort by due date
+            const aDate = a.due_date ? new Date(a.due_date) : null;
+            const bDate = b.due_date ? new Date(b.due_date) : null;
+            
+            // Tasks with due dates come before tasks without
+            if (aDate && !bDate) return -1;
+            if (!aDate && bDate) return 1;
+            if (!aDate && !bDate) return (a.title || '').localeCompare(b.title || '');
+            
+            // Both have due dates - sort chronologically
+            const dateComparison = aDate.getTime() - bDate.getTime();
+            if (dateComparison !== 0) return dateComparison;
+            
+            // Same due date - sort by title
+            return (a.title || '').localeCompare(b.title || '');
+        });
         
         this.renderTasksForCreate(filtered);
     }
@@ -880,6 +904,7 @@ class TaskPacksApp {
         
         // Reset date filter
         document.getElementById('filter-by-date').checked = true;
+        document.getElementById('exclude-assigned-tasks').checked = true;
         
         // Clear task selections
         this.elements.availableTasks.querySelectorAll('.task-checkbox').forEach(cb => {
@@ -2242,6 +2267,22 @@ class TaskPacksApp {
             const currentDate = new Date(current.due_date);
             return currentDate < earliestDate ? current : earliest;
         });
+    }
+    
+    getAssignedTaskIdsForDate(date) {
+        const assignedTaskIds = new Set();
+        
+        // Get all packs for the specified date
+        const packsForDate = this.packs.filter(pack => pack.date === date);
+        
+        // Collect all subtask IDs from those packs
+        packsForDate.forEach(pack => {
+            if (pack.subtaskIds && Array.isArray(pack.subtaskIds)) {
+                pack.subtaskIds.forEach(taskId => assignedTaskIds.add(taskId));
+            }
+        });
+        
+        return assignedTaskIds;
     }
     
     // Utility methods
