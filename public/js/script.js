@@ -353,7 +353,7 @@ function normalizeHexColor(c) {
   return c.startsWith('#') ? c : `#${c}`;
 }
 
-function getPerceivedBrightness(hexColor) {
+function getRelativeLuminance(hexColor) {
   if (!hexColor) return 0;
   
   // Remove # if present
@@ -364,13 +364,23 @@ function getPerceivedBrightness(hexColor) {
   const g = parseInt(hex.substr(2, 2), 16);
   const b = parseInt(hex.substr(4, 2), 16);
   
-  // YIQ perceived brightness formula
-  return (r * 299 + g * 587 + b * 114) / 1000;
+  // Convert to 0-1 range
+  const rNorm = r / 255;
+  const gNorm = g / 255;
+  const bNorm = b / 255;
+  
+  // Apply gamma correction
+  const rLinear = rNorm <= 0.03928 ? rNorm / 12.92 : Math.pow((rNorm + 0.055) / 1.055, 2.4);
+  const gLinear = gNorm <= 0.03928 ? gNorm / 12.92 : Math.pow((gNorm + 0.055) / 1.055, 2.4);
+  const bLinear = bNorm <= 0.03928 ? bNorm / 12.92 : Math.pow((bNorm + 0.055) / 1.055, 2.4);
+  
+  // Calculate relative luminance
+  return 0.2126 * rLinear + 0.7152 * gLinear + 0.0722 * bLinear;
 }
 
 function getTextColorForBackground(backgroundColor) {
-  const brightness = getPerceivedBrightness(backgroundColor);
-  return brightness > 128 ? '#000000' : '#ffffff';
+  const luminance = getRelativeLuminance(backgroundColor);
+  return luminance > 0.179 ? '#000000' : '#ffffff';
 }
 
 function ensureLabelSelectionDefaults(allLabels) {
@@ -969,12 +979,12 @@ function ensureCalendar() {
         arg.el.style.backgroundColor = c;
         arg.el.style.borderColor = c;
         
-        // Set text color based on background brightness
-        const brightness = getPerceivedBrightness(c);
+        // Set text color based on background luminance
+        const luminance = getRelativeLuminance(c);
         const textColor = getTextColorForBackground(c);
         
-        // Console log the calendar item name and YIQ brightness
-        console.log(`Calendar item: "${arg.event.title}" | Background color: ${c} | YIQ brightness: ${brightness} | Text color: ${textColor}`);
+        // Console log the calendar item name and relative luminance
+        console.log(`Calendar item: "${arg.event.title}" | Background color: ${c} | Relative luminance: ${luminance.toFixed(3)} | Text color: ${textColor}`);
         
         arg.el.style.color = textColor;
         
