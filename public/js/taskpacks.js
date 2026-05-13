@@ -1032,12 +1032,12 @@ class TaskPacksApp {
             const pack = this.packs.find(p => p.id === packId);
             if (!pack) return;
             
-            // Reset timer state for new session
+            // Reset timer state completely for new session
             this.timerElapsed = 0;
             this.timerStartTime = null;
             this.timerPaused = false;
             
-            // Create activity session
+            // Create activity session with explicit zero values
             const session = {
                 id: this.generateId(),
                 taskPackId: packId,
@@ -1048,6 +1048,7 @@ class TaskPacksApp {
                 breakStrategyIds: pack.breakStrategyIds,
                 totalElapsedSeconds: 0,
                 activeElapsedSeconds: 0,
+                currentElapsedSeconds: 0, // Explicitly set to 0 for new sessions
                 pausedIntervals: []
             };
             
@@ -1062,12 +1063,14 @@ class TaskPacksApp {
             this.activeSession = session;
             this.sessions = this.db.activitySessions;
             
-            // Sync session state to database immediately
-            await this.syncSessionState();
-            
             this.showActivePackPanel();
             this.startTimer();
             this.loadPacksForDate();
+            
+            // Sync session state after starting timer to ensure correct values
+            setTimeout(() => {
+                this.syncSessionState();
+            }, 1000);
             
             this.setStatus('Pack started');
         } catch (error) {
