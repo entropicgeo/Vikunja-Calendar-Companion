@@ -42,6 +42,7 @@ const db = new Low(adapter, { dayColors: {} }); // Provide default data structur
     db.data.breakEvents = db.data.breakEvents || [];
     db.data.strategyRatings = db.data.strategyRatings || [];
     db.data.taskPacksConfig = db.data.taskPacksConfig || {};
+    db.data.reminders = db.data.reminders || [];
     
     await db.write();
   } catch (error) {
@@ -62,7 +63,8 @@ const db = new Low(adapter, { dayColors: {} }); // Provide default data structur
       breakStrategies: [],
       breakEvents: [],
       strategyRatings: [],
-      taskPacksConfig: {}
+      taskPacksConfig: {},
+      reminders: []
     };
     try {
       await db.write();

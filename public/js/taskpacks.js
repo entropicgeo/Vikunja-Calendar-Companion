@@ -108,7 +108,28 @@ class TaskPacksApp {
             taskDetailsClose: document.getElementById('task-details-close'),
             
             // Config
-            taskReloadInterval: document.getElementById('task-reload-interval')
+            taskReloadInterval: document.getElementById('task-reload-interval'),
+            
+            // Reminders
+            addReminderBtn: document.getElementById('add-reminder-btn'),
+            remindersList: document.getElementById('reminders-list'),
+            reminderModal: document.getElementById('reminder-modal'),
+            reminderForm: document.getElementById('reminder-form'),
+            reminderModalClose: document.getElementById('reminder-modal-close'),
+            reminderCancel: document.getElementById('reminder-cancel'),
+            reminderText: document.getElementById('reminder-text'),
+            reminderType: document.getElementById('reminder-type'),
+            reminderTypeOptions: document.getElementById('reminder-type-options'),
+            delayMinutes: document.getElementById('delay-minutes'),
+            reminderTime: document.getElementById('reminder-time'),
+            reminderDate: document.getElementById('reminder-date'),
+            taskSearch: document.getElementById('task-search'),
+            taskSearchResults: document.getElementById('task-search-results'),
+            selectedTask: document.getElementById('selected-task'),
+            taskSearchDelay: document.getElementById('task-search-delay'),
+            taskSearchResultsDelay: document.getElementById('task-search-results-delay'),
+            selectedTaskDelay: document.getElementById('selected-task-delay'),
+            completionDelayMinutes: document.getElementById('completion-delay-minutes')
         };
         
         this.allTasks = [];
@@ -122,6 +143,12 @@ class TaskPacksApp {
         // Filter state
         this.selectedProjects = new Set();
         this.selectedLabels = new Set();
+        
+        // Reminders state
+        this.reminders = [];
+        this.reminderTimers = new Map();
+        this.selectedTaskForReminder = null;
+        this.selectedTaskForReminderDelay = null;
         
         this.init();
     }
@@ -175,6 +202,7 @@ class TaskPacksApp {
         if (!this.db.breakEvents) this.db.breakEvents = [];
         if (!this.db.strategyRatings) this.db.strategyRatings = [];
         if (!this.db.taskPacksConfig) this.db.taskPacksConfig = {};
+        if (!this.db.reminders) this.db.reminders = [];
     }
     
     async saveDatabase() {
@@ -411,9 +439,21 @@ class TaskPacksApp {
         // Task details modal
         this.elements.taskDetailsClose.addEventListener('click', () => this.hideTaskDetailsModal());
         
+        // Reminders
+        this.elements.addReminderBtn.addEventListener('click', () => this.showReminderModal());
+        this.elements.reminderModalClose.addEventListener('click', () => this.hideReminderModal());
+        this.elements.reminderCancel.addEventListener('click', () => this.hideReminderModal());
+        this.elements.reminderForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            this.saveReminder();
+        });
+        this.elements.reminderType.addEventListener('change', () => this.updateReminderTypeOptions());
+        this.elements.taskSearch.addEventListener('input', () => this.searchTasksForReminder('task-search'));
+        this.elements.taskSearchDelay.addEventListener('input', () => this.searchTasksForReminder('task-search-delay'));
+        
         // Modal backdrop clicks
         [this.elements.contextModal, this.elements.strategyModal, this.elements.ratingModal, 
-         this.elements.completionModal, this.elements.taskDetailsModal].forEach(modal => {
+         this.elements.completionModal, this.elements.taskDetailsModal, this.elements.reminderModal].forEach(modal => {
             if (modal) {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
@@ -438,6 +478,8 @@ class TaskPacksApp {
         // Load data for specific tabs
         if (tabName === 'create') {
             this.loadCreatePackData();
+        } else if (tabName === 'reminders') {
+            this.renderReminders();
         } else if (tabName === 'contexts') {
             this.renderContexts();
         } else if (tabName === 'strategies') {
@@ -459,6 +501,10 @@ class TaskPacksApp {
             this.strategies = this.db.breakStrategies || [];
             this.packs = this.db.taskPacks || [];
             this.sessions = this.db.activitySessions || [];
+            this.reminders = this.db.reminders || [];
+            
+            // Start reminder checking
+            this.startReminderChecker();
             
             // Load packs for current date
             await this.loadPacksForDate();
@@ -2581,6 +2627,460 @@ class TaskPacksApp {
         // If no related_tasks field, assume it's a potential parent task
         // (this is a conservative approach - we exclude it to be safe)
         return true;
+    }
+    
+    // Reminder Management
+    showReminderModal(reminderId = null) {
+        const isEdit = !!reminderId;
+        const reminder = isEdit ? this.reminders.find(r => r.id === reminderId) : null;
+        
+        document.getElementById('reminder-modal-title').textContent = isEdit ? 'Edit Reminder' : 'Add Reminder';
+        
+        if (reminder) {
+            this.elements.reminderText.value = reminder.text;
+            this.elements.reminderType.value = reminder.type;
+            this.updateReminderTypeOptions();
+            
+            // Populate type-specific fields
+            if (reminder.type === 'delay') {
+                this.elements.delayMinutes.value = reminder.delayMinutes || 15;
+            } else if (reminder.type === 'time') {
+                if (reminder.targetTime) {
+                    this.elements.reminderTime.value = reminder.targetTime;
+                }
+                if (reminder.targetDate) {
+                    this.elements.reminderDate.value = reminder.targetDate;
+                }
+            } else if (reminder.type === 'task_completion' && reminder.targetTaskId) {
+                const task = this.allTasks.find(t => t.id === reminder.targetTaskId);
+                if (task) {
+                    this.selectedTaskForReminder = task;
+                    this.updateSelectedTaskDisplay('task-search');
+                }
+            } else if (reminder.type === 'task_completion_delay' && reminder.targetTaskId) {
+                const task = this.allTasks.find(t => t.id === reminder.targetTaskId);
+                if (task) {
+                    this.selectedTaskForReminderDelay = task;
+                    this.updateSelectedTaskDisplay('task-search-delay');
+                }
+                this.elements.completionDelayMinutes.value = reminder.delayMinutes || 5;
+            }
+        } else {
+            this.elements.reminderForm.reset();
+            this.selectedTaskForReminder = null;
+            this.selectedTaskForReminderDelay = null;
+            this.updateReminderTypeOptions();
+        }
+        
+        this.elements.reminderForm.dataset.reminderId = reminderId || '';
+        this.elements.reminderModal.classList.add('show');
+    }
+    
+    hideReminderModal() {
+        this.elements.reminderModal.classList.remove('show');
+        this.elements.reminderForm.reset();
+        this.selectedTaskForReminder = null;
+        this.selectedTaskForReminderDelay = null;
+        this.updateSelectedTaskDisplay('task-search');
+        this.updateSelectedTaskDisplay('task-search-delay');
+        delete this.elements.reminderForm.dataset.reminderId;
+    }
+    
+    updateReminderTypeOptions() {
+        const type = this.elements.reminderType.value;
+        
+        // Hide all options first
+        document.querySelectorAll('.type-option').forEach(option => {
+            option.style.display = 'none';
+        });
+        
+        // Show relevant option
+        if (type === 'delay') {
+            document.getElementById('delay-options').style.display = 'block';
+        } else if (type === 'time') {
+            document.getElementById('time-options').style.display = 'block';
+            // Set default date to today if empty
+            if (!this.elements.reminderDate.value) {
+                this.elements.reminderDate.value = new Date().toISOString().split('T')[0];
+            }
+        } else if (type === 'task_completion') {
+            document.getElementById('task-options').style.display = 'block';
+        } else if (type === 'task_completion_delay') {
+            document.getElementById('task-delay-options').style.display = 'block';
+        }
+    }
+    
+    searchTasksForReminder(searchInputId) {
+        const searchText = document.getElementById(searchInputId).value.toLowerCase();
+        const resultsId = searchInputId === 'task-search' ? 'task-search-results' : 'task-search-results-delay';
+        const resultsContainer = document.getElementById(resultsId);
+        
+        if (searchText.length < 2) {
+            resultsContainer.style.display = 'none';
+            return;
+        }
+        
+        const matchingTasks = this.allTasks.filter(task => 
+            (task.title || '').toLowerCase().includes(searchText) && !task.done
+        ).slice(0, 10); // Limit to 10 results
+        
+        if (matchingTasks.length === 0) {
+            resultsContainer.innerHTML = '<div class="task-search-result">No matching tasks found</div>';
+            resultsContainer.style.display = 'block';
+            return;
+        }
+        
+        resultsContainer.innerHTML = matchingTasks.map(task => `
+            <div class="task-search-result" data-task-id="${task.id}" data-search-type="${searchInputId}">
+                <div class="task-search-result-title">${this.escapeHtml(task.title || `Task ${task.id}`)}</div>
+                <div class="task-search-result-meta">Project: ${task.project_id || 'None'}</div>
+            </div>
+        `).join('');
+        
+        // Add click handlers
+        resultsContainer.querySelectorAll('.task-search-result').forEach(result => {
+            result.addEventListener('click', () => {
+                const taskId = parseInt(result.dataset.taskId);
+                const searchType = result.dataset.searchType;
+                const task = this.allTasks.find(t => t.id === taskId);
+                
+                if (task) {
+                    if (searchType === 'task-search') {
+                        this.selectedTaskForReminder = task;
+                    } else {
+                        this.selectedTaskForReminderDelay = task;
+                    }
+                    this.updateSelectedTaskDisplay(searchType);
+                    resultsContainer.style.display = 'none';
+                    document.getElementById(searchType).value = '';
+                }
+            });
+        });
+        
+        resultsContainer.classList.add('show');
+    }
+    
+    updateSelectedTaskDisplay(searchType) {
+        const selectedTaskEl = searchType === 'task-search' ? 
+            this.elements.selectedTask : this.elements.selectedTaskDelay;
+        const task = searchType === 'task-search' ? 
+            this.selectedTaskForReminder : this.selectedTaskForReminderDelay;
+        
+        if (task) {
+            selectedTaskEl.querySelector('.selected-task-title').textContent = task.title || `Task ${task.id}`;
+            selectedTaskEl.style.display = 'flex';
+        } else {
+            selectedTaskEl.style.display = 'none';
+        }
+    }
+    
+    clearSelectedTask() {
+        this.selectedTaskForReminder = null;
+        this.updateSelectedTaskDisplay('task-search');
+    }
+    
+    clearSelectedTaskDelay() {
+        this.selectedTaskForReminderDelay = null;
+        this.updateSelectedTaskDisplay('task-search-delay');
+    }
+    
+    async saveReminder() {
+        try {
+            const reminderId = this.elements.reminderForm.dataset.reminderId;
+            const isEdit = !!reminderId;
+            
+            const text = this.elements.reminderText.value.trim();
+            const type = this.elements.reminderType.value;
+            
+            if (!text) {
+                this.setStatus('Please enter reminder text', 'error');
+                return;
+            }
+            
+            if (!type) {
+                this.setStatus('Please select a reminder type', 'error');
+                return;
+            }
+            
+            const reminderData = {
+                id: isEdit ? reminderId : this.generateId(),
+                text,
+                type,
+                status: 'active',
+                createdAt: isEdit ? this.reminders.find(r => r.id === reminderId).createdAt : new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            // Add type-specific data
+            if (type === 'delay') {
+                const delayMinutes = parseInt(this.elements.delayMinutes.value) || 15;
+                reminderData.delayMinutes = delayMinutes;
+                reminderData.triggerAt = new Date(Date.now() + delayMinutes * 60000).toISOString();
+            } else if (type === 'time') {
+                const time = this.elements.reminderTime.value;
+                const date = this.elements.reminderDate.value || new Date().toISOString().split('T')[0];
+                
+                if (!time) {
+                    this.setStatus('Please select a time', 'error');
+                    return;
+                }
+                
+                reminderData.targetTime = time;
+                reminderData.targetDate = date;
+                reminderData.triggerAt = new Date(`${date}T${time}`).toISOString();
+            } else if (type === 'task_completion') {
+                if (!this.selectedTaskForReminder) {
+                    this.setStatus('Please select a task', 'error');
+                    return;
+                }
+                reminderData.targetTaskId = this.selectedTaskForReminder.id;
+                reminderData.targetTaskTitle = this.selectedTaskForReminder.title;
+            } else if (type === 'task_completion_delay') {
+                if (!this.selectedTaskForReminderDelay) {
+                    this.setStatus('Please select a task', 'error');
+                    return;
+                }
+                const delayMinutes = parseInt(this.elements.completionDelayMinutes.value) || 5;
+                reminderData.targetTaskId = this.selectedTaskForReminderDelay.id;
+                reminderData.targetTaskTitle = this.selectedTaskForReminderDelay.title;
+                reminderData.delayMinutes = delayMinutes;
+            }
+            
+            if (isEdit) {
+                const index = this.reminders.findIndex(r => r.id === reminderId);
+                if (index !== -1) {
+                    this.reminders[index] = reminderData;
+                    this.db.reminders[index] = reminderData;
+                }
+            } else {
+                this.reminders.push(reminderData);
+                this.db.reminders.push(reminderData);
+            }
+            
+            await this.saveDatabase();
+            this.renderReminders();
+            this.hideReminderModal();
+            this.scheduleReminder(reminderData);
+            
+            this.setStatus(isEdit ? 'Reminder updated' : 'Reminder created');
+        } catch (error) {
+            console.error('Failed to save reminder:', error);
+            this.setStatus('Failed to save reminder', 'error');
+        }
+    }
+    
+    renderReminders() {
+        const activeReminders = this.reminders.filter(r => r.status !== 'completed' && r.status !== 'cancelled');
+        
+        if (activeReminders.length === 0) {
+            this.elements.remindersList.innerHTML = '<div class="loading">No active reminders</div>';
+            return;
+        }
+        
+        this.elements.remindersList.innerHTML = activeReminders.map(reminder => {
+            let details = '';
+            let statusText = '';
+            
+            if (reminder.type === 'delay') {
+                const triggerTime = new Date(reminder.triggerAt);
+                details = `In ${reminder.delayMinutes} minutes`;
+                statusText = `Triggers at ${triggerTime.toLocaleTimeString()}`;
+            } else if (reminder.type === 'time') {
+                details = `At ${reminder.targetTime} on ${reminder.targetDate}`;
+                statusText = `Scheduled for ${new Date(reminder.triggerAt).toLocaleString()}`;
+            } else if (reminder.type === 'task_completion') {
+                details = `After "${reminder.targetTaskTitle}" is completed`;
+                statusText = 'Waiting for task completion';
+            } else if (reminder.type === 'task_completion_delay') {
+                details = `${reminder.delayMinutes} minutes after "${reminder.targetTaskTitle}" is completed`;
+                statusText = 'Waiting for task completion';
+            }
+            
+            return `
+                <div class="reminder-item ${reminder.status}">
+                    <div class="reminder-item-header">
+                        <div>
+                            <div class="reminder-item-text">${this.escapeHtml(reminder.text)}</div>
+                            <div class="reminder-item-type">${reminder.type.replace('_', ' ')}</div>
+                        </div>
+                    </div>
+                    <div class="reminder-item-details">${details}</div>
+                    <div class="reminder-item-status">${statusText}</div>
+                    <div class="reminder-item-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="taskPacksApp.showReminderModal('${reminder.id}')">Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="taskPacksApp.deleteReminder('${reminder.id}')">Delete</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    async deleteReminder(reminderId) {
+        if (!confirm('Are you sure you want to delete this reminder?')) return;
+        
+        try {
+            // Cancel any active timer
+            if (this.reminderTimers.has(reminderId)) {
+                clearTimeout(this.reminderTimers.get(reminderId));
+                this.reminderTimers.delete(reminderId);
+            }
+            
+            this.db.reminders = this.db.reminders.filter(r => r.id !== reminderId);
+            await this.saveDatabase();
+            this.reminders = this.db.reminders;
+            this.renderReminders();
+            this.setStatus('Reminder deleted');
+        } catch (error) {
+            console.error('Failed to delete reminder:', error);
+            this.setStatus('Failed to delete reminder', 'error');
+        }
+    }
+    
+    scheduleReminder(reminder) {
+        if (reminder.type === 'delay' || reminder.type === 'time') {
+            const triggerTime = new Date(reminder.triggerAt);
+            const now = new Date();
+            const delay = triggerTime.getTime() - now.getTime();
+            
+            if (delay > 0) {
+                const timerId = setTimeout(() => {
+                    this.triggerReminder(reminder);
+                }, delay);
+                
+                this.reminderTimers.set(reminder.id, timerId);
+            }
+        }
+        // Task-based reminders are checked in the reminder checker
+    }
+    
+    async triggerReminder(reminder) {
+        try {
+            // Show notification
+            await this.showReminderNotification(reminder);
+            
+            // Mark as completed
+            reminder.status = 'completed';
+            reminder.completedAt = new Date().toISOString();
+            
+            const index = this.reminders.findIndex(r => r.id === reminder.id);
+            if (index !== -1) {
+                this.reminders[index] = reminder;
+                this.db.reminders[index] = reminder;
+                await this.saveDatabase();
+            }
+            
+            // Clean up timer
+            this.reminderTimers.delete(reminder.id);
+            
+            // Refresh display
+            this.renderReminders();
+        } catch (error) {
+            console.error('Failed to trigger reminder:', error);
+        }
+    }
+    
+    async showReminderNotification(reminder) {
+        const title = 'Reminder';
+        const body = reminder.text;
+        
+        // Try browser notification first
+        if (this.notificationPermission === 'granted') {
+            try {
+                const notification = new Notification(title, {
+                    body,
+                    icon: '/favicon.ico',
+                    tag: `reminder-${reminder.id}`,
+                    requireInteraction: true
+                });
+                
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                };
+                
+                // Auto-close after 30 seconds
+                setTimeout(() => notification.close(), 30000);
+                return;
+            } catch (error) {
+                console.error('Failed to show browser notification:', error);
+            }
+        }
+        
+        // Fall back to in-app notification
+        this.showInAppReminderNotification(reminder);
+    }
+    
+    showInAppReminderNotification(reminder) {
+        const notification = document.createElement('div');
+        notification.className = 'break-notification'; // Reuse existing styles
+        notification.innerHTML = `
+            <div class="break-notification-content">
+                <h4>Reminder</h4>
+                <p>${this.escapeHtml(reminder.text)}</p>
+                <div class="break-notification-actions">
+                    <button class="btn btn-primary btn-sm" onclick="this.parentElement.parentElement.parentElement.remove()">Got it</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 30 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 30000);
+        
+        this.playNotificationSound();
+    }
+    
+    startReminderChecker() {
+        // Check for task completion reminders every 30 seconds
+        setInterval(() => {
+            this.checkTaskCompletionReminders();
+        }, 30000);
+        
+        // Schedule any existing time-based reminders
+        this.reminders.forEach(reminder => {
+            if (reminder.status === 'active' && (reminder.type === 'delay' || reminder.type === 'time')) {
+                this.scheduleReminder(reminder);
+            }
+        });
+    }
+    
+    async checkTaskCompletionReminders() {
+        const taskReminders = this.reminders.filter(r => 
+            r.status === 'active' && (r.type === 'task_completion' || r.type === 'task_completion_delay')
+        );
+        
+        for (const reminder of taskReminders) {
+            try {
+                // Check if the target task is now done
+                const response = await fetch(`/api/tasks/${reminder.targetTaskId}`);
+                if (response.ok) {
+                    const task = await response.json();
+                    if (task.done) {
+                        if (reminder.type === 'task_completion') {
+                            // Trigger immediately
+                            this.triggerReminder(reminder);
+                        } else if (reminder.type === 'task_completion_delay') {
+                            // Schedule delayed trigger
+                            const delay = (reminder.delayMinutes || 5) * 60000;
+                            reminder.triggerAt = new Date(Date.now() + delay).toISOString();
+                            
+                            const timerId = setTimeout(() => {
+                                this.triggerReminder(reminder);
+                            }, delay);
+                            
+                            this.reminderTimers.set(reminder.id, timerId);
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error(`Failed to check task ${reminder.targetTaskId} for reminder:`, error);
+            }
+        }
     }
     
     // Utility methods

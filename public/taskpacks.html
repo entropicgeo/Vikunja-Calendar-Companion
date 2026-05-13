@@ -30,6 +30,7 @@
         <div class="tab-nav">
             <button class="tab-btn active" data-tab="packs">Packs</button>
             <button class="tab-btn" data-tab="create">Create Pack</button>
+            <button class="tab-btn" data-tab="reminders">Reminders</button>
             <button class="tab-btn" data-tab="contexts">Contexts</button>
             <button class="tab-btn" data-tab="strategies">Break Strategies</button>
             <button class="tab-btn" data-tab="config">Config</button>
@@ -156,6 +157,15 @@
                     <button type="button" id="clear-form-btn" class="btn btn-secondary">Clear</button>
                 </div>
             </form>
+        </div>
+
+        <!-- Reminders Tab -->
+        <div class="tab-content" id="reminders-tab">
+            <div class="tab-header">
+                <h3>One-Shot Reminders</h3>
+                <button id="add-reminder-btn" class="btn btn-primary">Add Reminder</button>
+            </div>
+            <div class="reminders-list" id="reminders-list"></div>
         </div>
 
         <!-- Contexts Tab -->
@@ -406,6 +416,82 @@
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Save Rating</button>
                     <button type="button" class="btn btn-secondary" id="rating-cancel">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Reminder Modal -->
+    <div class="modal" id="reminder-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="reminder-modal-title">Add Reminder</h3>
+                <button class="modal-close" id="reminder-modal-close">&times;</button>
+            </div>
+            <form id="reminder-form">
+                <div class="form-group">
+                    <label for="reminder-text">Reminder Text:</label>
+                    <input type="text" id="reminder-text" required placeholder="What should I remind you about?">
+                </div>
+                
+                <div class="form-group">
+                    <label for="reminder-type">Reminder Type:</label>
+                    <select id="reminder-type" required>
+                        <option value="">Select type...</option>
+                        <option value="delay">In X minutes</option>
+                        <option value="time">At specific time</option>
+                        <option value="task_completion">After task completion</option>
+                        <option value="task_completion_delay">X minutes after task completion</option>
+                    </select>
+                </div>
+                
+                <div class="reminder-type-options" id="reminder-type-options">
+                    <!-- Delay options -->
+                    <div class="type-option" id="delay-options" style="display: none;">
+                        <label for="delay-minutes">Minutes from now:</label>
+                        <input type="number" id="delay-minutes" min="1" value="15">
+                    </div>
+                    
+                    <!-- Time options -->
+                    <div class="type-option" id="time-options" style="display: none;">
+                        <label for="reminder-time">Time:</label>
+                        <input type="time" id="reminder-time">
+                        <label for="reminder-date">Date (optional, defaults to today):</label>
+                        <input type="date" id="reminder-date">
+                    </div>
+                    
+                    <!-- Task completion options -->
+                    <div class="type-option" id="task-options" style="display: none;">
+                        <label for="target-task">Select Task:</label>
+                        <div class="task-search-container">
+                            <input type="text" id="task-search" placeholder="Search for a task...">
+                            <div class="task-search-results" id="task-search-results"></div>
+                        </div>
+                        <div class="selected-task" id="selected-task" style="display: none;">
+                            <span class="selected-task-title"></span>
+                            <button type="button" class="btn btn-xs" onclick="taskPacksApp.clearSelectedTask()">Clear</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Task completion with delay options -->
+                    <div class="type-option" id="task-delay-options" style="display: none;">
+                        <label for="target-task-delay">Select Task:</label>
+                        <div class="task-search-container">
+                            <input type="text" id="task-search-delay" placeholder="Search for a task...">
+                            <div class="task-search-results" id="task-search-results-delay"></div>
+                        </div>
+                        <div class="selected-task" id="selected-task-delay" style="display: none;">
+                            <span class="selected-task-title"></span>
+                            <button type="button" class="btn btn-xs" onclick="taskPacksApp.clearSelectedTaskDelay()">Clear</button>
+                        </div>
+                        <label for="completion-delay-minutes">Minutes after completion:</label>
+                        <input type="number" id="completion-delay-minutes" min="1" value="5">
+                    </div>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary">Create Reminder</button>
+                    <button type="button" class="btn btn-secondary" id="reminder-cancel">Cancel</button>
                 </div>
             </form>
         </div>
