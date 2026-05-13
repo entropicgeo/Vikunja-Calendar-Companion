@@ -13,6 +13,7 @@ class TaskPacksApp {
         this.timerStartTime = null;
         this.timerElapsed = 0;
         this.timerPaused = false;
+        this.notificationPermission = 'default';
         
         this.elements = {
             packDate: document.getElementById('pack-date'),
@@ -99,6 +100,7 @@ class TaskPacksApp {
             this.setupEventListeners();
             this.elements.packDate.value = this.currentDate;
             await this.loadAllData();
+            this.checkNotificationPermission();
             this.setStatus('Task Packs loaded successfully');
         } catch (error) {
             console.error('Failed to initialize Task Packs:', error);
@@ -166,6 +168,16 @@ class TaskPacksApp {
         this.config.taskPacksProjectId = parseInt(this.elements.taskPacksProject.value) || null;
         this.config.defaultDurationMinutes = parseInt(this.elements.defaultDuration.value) || 45;
         this.config.breakNotificationsEnabled = this.elements.breakNotifications.checked;
+        
+        // If notifications are being enabled, request permission
+        if (this.config.breakNotificationsEnabled && this.notificationPermission !== 'granted') {
+            const granted = await this.requestNotificationPermission();
+            if (!granted) {
+                // If permission denied, disable notifications in config
+                this.config.breakNotificationsEnabled = false;
+                this.elements.breakNotifications.checked = false;
+            }
+        }
         
         this.db.taskPacksConfig = this.config;
         await this.saveDatabase();
@@ -1008,14 +1020,13 @@ class TaskPacksApp {
     startBreak() {
         if (!this.activeSession) return;
         
-        // For now, just show a simple alert with break instructions
         const strategies = this.activeSession.breakStrategyIds.map(id =>
             this.strategies.find(s => s.id === id)
         ).filter(Boolean);
         
         if (strategies.length > 0) {
             const strategy = strategies[0];
-            alert(`Break Time!\n\n${strategy.name}\n\n${strategy.prompt}`);
+            this.showBreakNotification(strategy);
         }
     }
     
@@ -1481,6 +1492,220 @@ class TaskPacksApp {
             const optionValue = parseInt(checkbox.closest('.multi-select-option').dataset.value);
             checkbox.checked = selectedSet.has(optionValue);
         });
+    }
+    
+    // Notification methods
+    checkNotificationPermission() {
+        if ('Notification' in window) {
+            this.notificationPermission = Notification.permission;
+            console.log('Notification permission:', this.notificationPermission);
+        } else {
+            console.log('This browser does not support notifications');
+            this.notificationPermission = 'unsupported';
+        }
+    }
+    
+    async requestNotificationPermission() {
+        if (!('Notification' in window)) {
+            this.setStatus('This browser does not support notifications', 'warning');
+            return false;
+        }
+        
+        if (Notification.permission === 'granted') {
+            this.notificationPermission = 'granted';
+            return true;
+        }
+        
+        if (Notification.permission === 'denied') {
+            this.setStatus('Notifications are blocked. Please enable them in your browser settings.', 'warning');
+            return false;
+        }
+        
+        try {
+            const permission = await Notification.requestPermission();
+            this.notificationPermission = permission;
+            
+            if (permission === 'granted') {
+                this.setStatus('Notifications enabled successfully');
+                return true;
+            } else {
+                this.setStatus('Notification permission denied', 'warning');
+                return false;
+            }
+        } catch (error) {
+            console.error('Error requesting notification permission:', error);
+            this.setStatus('Failed to request notification permission', 'error');
+            return false;
+        }
+    }
+    
+    async showBreakNotification(strategy) {
+        // Check if notifications are enabled in config
+        if (!this.config.breakNotificationsEnabled) {
+            // Fall back to in-app notification
+            this.showInAppBreakNotification(strategy);
+            return;
+        }
+        
+        // Request permission if not already granted
+        if (this.notificationPermission !== 'granted') {
+            const granted = await this.requestNotificationPermission();
+            if (!granted) {
+                // Fall back to in-app notification
+                this.showInAppBreakNotification(strategy);
+                return;
+            }
+        }
+        
+        try {
+            const notification = new Notification('Break Time!', {
+                body: `${strategy.name}\n\n${strategy.prompt}`,
+                icon: '/favicon.ico', // You can add a custom icon here
+                badge: '/favicon.ico',
+                tag: 'task-pack-break', // Prevents duplicate notifications
+                requireInteraction: true, // Keeps notification visible until user interacts
+                actions: [
+                    {
+                        action: 'start',
+                        title: 'Start Break'
+                    },
+                    {
+                        action: 'snooze',
+                        title: 'Snooze 5min'
+                    }
+                ]
+            });
+            
+            // Handle notification click
+            notification.onclick = () => {
+                window.focus(); // Focus the app window
+                this.handleBreakNotificationClick(strategy);
+                notification.close();
+            };
+            
+            // Handle notification actions (if supported)
+            if ('actions' in notification) {
+                notification.onnotificationclick = (event) => {
+                    event.notification.close();
+                    
+                    if (event.action === 'start') {
+                        window.focus();
+                        this.handleBreakNotificationClick(strategy);
+                    } else if (event.action === 'snooze') {
+                        window.focus();
+                        this.snoozeBreak(5); // Snooze for 5 minutes
+                    }
+                };
+            }
+            
+            // Auto-close after 30 seconds if not interacted with
+            setTimeout(() => {
+                notification.close();
+            }, 30000);
+            
+        } catch (error) {
+            console.error('Error showing notification:', error);
+            // Fall back to in-app notification
+            this.showInAppBreakNotification(strategy);
+        }
+    }
+    
+    showInAppBreakNotification(strategy) {
+        // Create an in-app notification as fallback
+        const notification = document.createElement('div');
+        notification.className = 'break-notification';
+        notification.innerHTML = `
+            <div class="break-notification-content">
+                <h4>Break Time!</h4>
+                <h5>${this.escapeHtml(strategy.name)}</h5>
+                <p>${this.escapeHtml(strategy.prompt)}</p>
+                <div class="break-notification-actions">
+                    <button class="btn btn-primary btn-sm" onclick="this.parentElement.parentElement.parentElement.remove()">Got it</button>
+                    <button class="btn btn-secondary btn-sm" onclick="taskPacksApp.snoozeBreak(5); this.parentElement.parentElement.parentElement.remove()">Snooze 5min</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 30 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.remove();
+            }
+        }, 30000);
+        
+        // Play a subtle sound if possible (optional)
+        this.playNotificationSound();
+    }
+    
+    handleBreakNotificationClick(strategy) {
+        // Focus on the active pack panel
+        if (this.elements.activePackPanel) {
+            this.elements.activePackPanel.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Show break details in the break info area
+        this.elements.breakInfo.innerHTML = `
+            <div class="current-break">
+                <strong>Current Break: ${this.escapeHtml(strategy.name)}</strong>
+                <p>${this.escapeHtml(strategy.prompt)}</p>
+                <small>Duration: ${strategy.suggestedDurationSeconds} seconds</small>
+            </div>
+        `;
+        
+        // Record break event
+        this.recordBreakEvent(strategy);
+    }
+    
+    snoozeBreak(minutes) {
+        if (!this.activeSession) return;
+        
+        this.setStatus(`Break snoozed for ${minutes} minutes`);
+        
+        // Schedule the break again after the snooze period
+        setTimeout(() => {
+            if (this.activeSession && (this.activeSession.status === 'running')) {
+                const strategies = this.activeSession.breakStrategyIds.map(id =>
+                    this.strategies.find(s => s.id === id)
+                ).filter(Boolean);
+                
+                if (strategies.length > 0) {
+                    this.showBreakNotification(strategies[0]);
+                }
+            }
+        }, minutes * 60 * 1000);
+    }
+    
+    recordBreakEvent(strategy) {
+        if (!this.activeSession) return;
+        
+        const breakEvent = {
+            id: this.generateId(),
+            taskPackId: this.activeSession.taskPackId,
+            activitySessionId: this.activeSession.id,
+            breakStrategyId: strategy.id,
+            scheduledFor: new Date().toISOString(),
+            startedAt: new Date().toISOString(),
+            status: 'started'
+        };
+        
+        if (!this.db.breakEvents) this.db.breakEvents = [];
+        this.db.breakEvents.push(breakEvent);
+        this.saveDatabase();
+    }
+    
+    playNotificationSound() {
+        // Try to play a subtle notification sound
+        try {
+            const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT');
+            audio.volume = 0.1;
+            audio.play().catch(() => {
+                // Ignore errors - sound is optional
+            });
+        } catch (error) {
+            // Ignore errors - sound is optional
+        }
     }
     
     // Utility methods
