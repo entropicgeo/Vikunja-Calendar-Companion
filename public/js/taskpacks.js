@@ -392,6 +392,7 @@ class TaskPacksApp {
         this.elements.ratingCancel.addEventListener('click', () => this.hideRatingModal());
         this.elements.ratingForm.addEventListener('submit', (e) => {
             e.preventDefault();
+            console.log('Rating form submitted');
             this.saveRating();
         });
         
@@ -1494,11 +1495,22 @@ class TaskPacksApp {
     
     async saveRating() {
         try {
-            if (!this.activeSession) return;
+            console.log('saveRating called');
+            
+            if (!this.activeSession) {
+                console.log('No active session found');
+                this.setStatus('No active session found', 'error');
+                return;
+            }
             
             const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
-            if (!pack) return;
+            if (!pack) {
+                console.log('Pack not found for active session');
+                this.setStatus('Pack not found', 'error');
+                return;
+            }
             
+            console.log('Saving ratings for pack:', pack.title);
             const ratings = [];
             
             // Overall session rating
@@ -1584,11 +1596,19 @@ class TaskPacksApp {
             });
             
             // Save all ratings
+            console.log('Saving ratings:', ratings);
+            
+            if (!this.db.strategyRatings) {
+                this.db.strategyRatings = [];
+            }
+            
             this.db.strategyRatings.push(...ratings);
             await this.saveDatabase();
             
             this.hideRatingModal();
             this.setStatus(`Saved ${ratings.length} rating${ratings.length !== 1 ? 's' : ''}`);
+            
+            console.log('Ratings saved successfully');
         } catch (error) {
             console.error('Failed to save rating:', error);
             this.setStatus('Failed to save rating', 'error');
