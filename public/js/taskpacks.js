@@ -2715,8 +2715,8 @@ class TaskPacksApp {
         const resultsId = searchInputId === 'task-search' ? 'task-search-results' : 'task-search-results-delay';
         const resultsContainer = document.getElementById(resultsId);
         
-        if (searchText.length < 2) {
-            resultsContainer.style.display = 'none';
+        if (searchText.length < 1) {
+            resultsContainer.classList.remove('show');
             return;
         }
         
@@ -2754,22 +2754,25 @@ class TaskPacksApp {
         
         if (matchingTasks.length === 0) {
             resultsContainer.innerHTML = '<div class="task-search-result">No matching tasks found for today</div>';
-            resultsContainer.style.display = 'block';
+            resultsContainer.classList.add('show');
             return;
         }
         
         resultsContainer.innerHTML = matchingTasks.map(task => {
             const labelColor = this.getTaskLabelColor(task);
-            const textColor = labelColor ? this.getTextColorForBackground(labelColor) : '';
-            const styleAttr = labelColor ? `style="background-color: ${labelColor}; color: ${textColor};"` : '';
+            const textColor = labelColor ? this.getTextColorForBackground(labelColor) : 'var(--text-primary)';
+            const backgroundColor = labelColor || 'var(--card-bg)';
             const isTaskPack = this.isTaskPackParentTask(task);
             
             return `
-                <div class="task-search-result" data-task-id="${task.id}" data-search-type="${searchInputId}" ${styleAttr}>
+                <div class="task-search-result" data-task-id="${task.id}" data-search-type="${searchInputId}" 
+                     style="background-color: ${backgroundColor}; color: ${textColor};">
                     <div class="task-search-result-title">
                         ${isTaskPack ? '📦 ' : ''}${this.escapeHtml(task.title || `Task ${task.id}`)}
                     </div>
-                    <div class="task-search-result-meta">Project: ${task.project_id || 'None'}</div>
+                    <div class="task-search-result-meta" style="color: ${textColor}; opacity: 0.8;">
+                        Project: ${task.project_id || 'None'}
+                    </div>
                 </div>
             `;
         }).join('');
@@ -2788,7 +2791,7 @@ class TaskPacksApp {
                         this.selectedTaskForReminderDelay = task;
                     }
                     this.updateSelectedTaskDisplay(searchType);
-                    resultsContainer.style.display = 'none';
+                    resultsContainer.classList.remove('show');
                     document.getElementById(searchType).value = '';
                 }
             });
@@ -2895,6 +2898,10 @@ class TaskPacksApp {
             }
             
             await this.saveDatabase();
+            
+            // Reload reminders from database to avoid duplicates
+            this.reminders = this.db.reminders;
+            
             this.renderReminders();
             this.hideReminderModal();
             this.scheduleReminder(reminderData);
@@ -2962,9 +2969,11 @@ class TaskPacksApp {
                 this.reminderTimers.delete(reminderId);
             }
             
+            // Remove from both local array and database
+            this.reminders = this.reminders.filter(r => r.id !== reminderId);
             this.db.reminders = this.db.reminders.filter(r => r.id !== reminderId);
+            
             await this.saveDatabase();
-            this.reminders = this.db.reminders;
             this.renderReminders();
             this.setStatus('Reminder deleted');
         } catch (error) {
