@@ -1097,8 +1097,9 @@ class TaskPacksApp {
     startTimer() {
         if (this.timer) return;
         
-        // Reset timer elapsed to 0 when starting a new session
-        if (!this.activeSession || this.activeSession.status !== 'paused') {
+        // Only reset timer elapsed to 0 when starting a completely new session
+        // For resumed sessions, preserve the elapsed time
+        if (!this.timerPaused && (!this.activeSession || this.activeSession.status === 'running')) {
             this.timerElapsed = 0;
         }
         
@@ -1123,6 +1124,11 @@ class TaskPacksApp {
     
     pauseSession() {
         if (!this.activeSession || this.timerPaused) return;
+        
+        // Calculate current elapsed time before pausing
+        if (this.timerStartTime) {
+            this.timerElapsed = Math.floor((Date.now() - this.timerStartTime) / 1000);
+        }
         
         this.timerPaused = true;
         this.stopTimer();
