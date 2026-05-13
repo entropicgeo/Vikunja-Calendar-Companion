@@ -2700,19 +2700,43 @@ class TaskPacksApp {
                 pack.updatedAt = new Date().toISOString();
             }
             
+            // Update the session in the database
+            const sessionIndex = this.db.activitySessions.findIndex(s => s.id === this.activeSession.id);
+            if (sessionIndex !== -1) {
+                this.db.activitySessions[sessionIndex] = { ...this.activeSession };
+            }
+            
+            // Update the pack in the database
+            if (pack) {
+                const packIndex = this.db.taskPacks.findIndex(p => p.id === pack.id);
+                if (packIndex !== -1) {
+                    this.db.taskPacks[packIndex] = { ...pack };
+                }
+            }
+            
             await this.saveDatabase();
+            
+            // Update local arrays from database
+            this.sessions = this.db.activitySessions;
+            this.packs = this.db.taskPacks;
             
             this.hideCompletionModal();
             
             // Store completed session for rating modal
             this.completedSession = { ...this.activeSession };
             
+            // Clear active session state completely
+            this.activeSession = null;
+            this.timerElapsed = 0;
+            this.timerStartTime = null;
+            this.timerPaused = false;
+            this.stopTimer();
+            this.stopSessionSyncTimer();
+            this.hideActivePackPanel();
+            
             // Show rating modal
             this.showRatingModal();
             
-            this.activeSession = null;
-            this.timerElapsed = 0;
-            this.hideActivePackPanel();
             this.loadPacksForDate();
             
             this.setStatus('Session completed');
