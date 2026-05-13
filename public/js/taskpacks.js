@@ -1791,11 +1791,20 @@ class TaskPacksApp {
         const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
         if (!pack) return;
         
-        const tasks = pack.subtaskIds.map(id => 
+        // Get all tasks that are subtasks of this pack
+        const allPackTasks = pack.subtaskIds.map(id => 
             this.allTasks.find(t => t.id === id)
         ).filter(Boolean);
         
-        this.renderActivePackTasks(tasks);
+        // Filter to only show tasks with the same due date as the pack date
+        const packDate = pack.date; // YYYY-MM-DD format
+        const filteredTasks = allPackTasks.filter(task => {
+            if (!task.due_date) return false;
+            const taskDueDate = new Date(task.due_date).toISOString().split('T')[0];
+            return taskDueDate === packDate;
+        });
+        
+        this.renderActivePackTasks(filteredTasks);
     }
     
     renderActivePackTasks(tasks) {
@@ -2037,9 +2046,19 @@ class TaskPacksApp {
         const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
         if (!pack) return;
         
-        const tasks = pack.subtaskIds.map(id => 
+        // Get all pack tasks
+        const allPackTasks = pack.subtaskIds.map(id => 
             this.allTasks.find(t => t.id === id)
-        ).filter(task => task && !task.done);
+        ).filter(Boolean);
+        
+        // Filter to only show tasks with the same due date as the pack date and not done
+        const packDate = pack.date; // YYYY-MM-DD format
+        const tasks = allPackTasks.filter(task => {
+            if (task.done) return false;
+            if (!task.due_date) return false;
+            const taskDueDate = new Date(task.due_date).toISOString().split('T')[0];
+            return taskDueDate === packDate;
+        });
         
         this.elements.remainingTasksList.innerHTML = tasks.map(task => `
             <div class="remaining-task-item">
@@ -2073,9 +2092,14 @@ class TaskPacksApp {
             if (markAllSubtasksDone) {
                 const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
                 if (pack) {
+                    // Only mark tasks that match the pack date and are not done
+                    const packDate = pack.date;
                     tasksToMarkDone = pack.subtaskIds.filter(id => {
                         const task = this.allTasks.find(t => t.id === id);
-                        return task && !task.done;
+                        if (!task || task.done) return false;
+                        if (!task.due_date) return false;
+                        const taskDueDate = new Date(task.due_date).toISOString().split('T')[0];
+                        return taskDueDate === packDate;
                     });
                 }
             } else {
