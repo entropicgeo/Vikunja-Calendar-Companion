@@ -395,12 +395,58 @@ app.put('/api/tasks', async (req, res) => {
     
     const data = await response.json();
     console.log('Task created successfully:', data);
+    
+    // If labels were provided in the payload, we need to assign them separately
+    if (payload.labels && Array.isArray(payload.labels) && payload.labels.length > 0) {
+      console.log('Assigning labels to created task:', payload.labels);
+      try {
+        await assignLabelsToTask(baseUrl, token, data.id, payload.labels);
+        console.log('Labels assigned successfully');
+      } catch (labelError) {
+        console.error('Failed to assign labels:', labelError);
+        // Don't fail the entire request if label assignment fails
+      }
+    }
+    
     res.json(data);
   } catch (error) {
     console.error('Error creating task:', error);
     res.status(500).json({ error: error.message });
   }
 });
+
+// Helper function to assign labels to a task
+async function assignLabelsToTask(baseUrl, token, taskId, labels) {
+  for (const label of labels) {
+    try {
+      const labelPayload = {
+        label_id: label.id
+      };
+      
+      const url = `${baseUrl}/api/v1/tasks/${taskId}/labels`;
+      console.log(`Assigning label ${label.id} to task ${taskId}`);
+      
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(labelPayload)
+      });
+      
+      if (!response.ok) {
+        const text = await response.text();
+        console.error(`Failed to assign label ${label.id}:`, text);
+      } else {
+        console.log(`Successfully assigned label ${label.id} to task ${taskId}`);
+      }
+    } catch (error) {
+      console.error(`Error assigning label ${label.id} to task ${taskId}:`, error);
+    }
+  }
+}
 
 // Day color endpoints
 app.get('/api/daycolors', async (req, res) => {
