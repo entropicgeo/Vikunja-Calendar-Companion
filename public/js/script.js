@@ -27,6 +27,7 @@ const els = {
   projectionWeeks: document.getElementById('projectionWeeks'),
   clearSelectionBtn: document.getElementById('clearSelectionBtn'),
   selectedCount: document.getElementById('selectedCount'),
+  markDoneArea: document.getElementById('markDoneArea'),
 };
 els.labelsPicker.innerHTML = '<div class="small">Press “Load labels” to populate.</div>';
 
@@ -352,6 +353,36 @@ function normalizeHexColor(c) {
   return c.startsWith('#') ? c : `#${c}`;
 }
 
+function getRelativeLuminance(hexColor) {
+  if (!hexColor) return 0;
+  
+  // Remove # if present
+  const hex = hexColor.replace('#', '');
+  
+  // Parse RGB values
+  const r = parseInt(hex.substr(0, 2), 16);
+  const g = parseInt(hex.substr(2, 2), 16);
+  const b = parseInt(hex.substr(4, 2), 16);
+  
+  // Convert to 0-1 range
+  const rNorm = r / 255;
+  const gNorm = g / 255;
+  const bNorm = b / 255;
+  
+  // Apply gamma correction
+  const rLinear = rNorm <= 0.03928 ? rNorm / 12.92 : Math.pow((rNorm + 0.055) / 1.055, 2.4);
+  const gLinear = gNorm <= 0.03928 ? gNorm / 12.92 : Math.pow((gNorm + 0.055) / 1.055, 2.4);
+  const bLinear = bNorm <= 0.03928 ? bNorm / 12.92 : Math.pow((bNorm + 0.055) / 1.055, 2.4);
+  
+  // Calculate relative luminance
+  return 0.2126 * rLinear + 0.7152 * gLinear + 0.0722 * bLinear;
+}
+
+function getTextColorForBackground(backgroundColor) {
+  const luminance = getRelativeLuminance(backgroundColor);
+  return luminance > 0.55 ? '#000000' : '#ffffff';
+}
+
 function ensureLabelSelectionDefaults(allLabels) {
   // Any new label IDs not in the selection map default to true (included)
   for (const l of allLabels) {
@@ -640,6 +671,51 @@ async function markTaskAsDone(taskId) {
   }
 }
 
+// Function to mark multiple tasks as done
+async function markMultipleTasksAsDone(taskIds) {
+  const cfg = config();
+  const totalTasks = taskIds.length;
+  
+  setStatus(`Marking ${totalTasks} tasks as done...`);
+  
+  let successCount = 0;
+  let failCount = 0;
+  
+  // Process tasks sequentially to avoid overwhelming the API
+  for (const taskId of taskIds) {
+    try {
+      // Update the task with done=true
+      await vikunjaUpdateTaskFull(cfg, taskId, { done: true });
+      
+      // Remove the task from our local cache
+      tasksById.delete(taskId);
+      
+      successCount++;
+      setStatus(`Progress: ${successCount}/${totalTasks} tasks marked as done...`);
+      
+      // Small delay between requests to reduce server load
+      if (totalTasks > 5) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    } catch (e) {
+      console.error(`Failed to mark task ${taskId} as done:`, e);
+      failCount++;
+    }
+  }
+  
+  if (failCount === 0) {
+    setStatus(`Successfully marked ${successCount} tasks as done.`);
+  } else {
+    setStatus(`Marked ${successCount} tasks as done. Failed to mark ${failCount} tasks.`);
+  }
+  
+  // Clear selections after marking as done
+  clearAllSelections();
+  
+  // Reload all tasks instead of just refreshing UI from cache
+  await loadEverything();
+}
+
 function mergeTaskPreserveLabels(oldTask, updatedTask) {
   if (!oldTask) return updatedTask || null;
   if (!updatedTask) return oldTask;
@@ -902,6 +978,21 @@ function ensureCalendar() {
       if (c) {
         arg.el.style.backgroundColor = c;
         arg.el.style.borderColor = c;
+        
+        // Set text color based on background luminance
+        const luminance = getRelativeLuminance(c);
+        const textColor = getTextColorForBackground(c);
+        
+        // Console log the calendar item name and relative luminance
+        console.log(`Calendar item: "${arg.event.title}" | Background color: ${c} | Relative luminance: ${luminance.toFixed(3)} | Text color: ${textColor}`);
+        
+        arg.el.style.color = textColor;
+        
+        // Also apply to child elements that contain text
+        const textElements = arg.el.querySelectorAll('.fc-event-title, .fc-event-time, .fc-list-event-title, .fc-list-event-time');
+        textElements.forEach(el => {
+          el.style.color = textColor;
+        });
       }
       arg.el.style.borderRadius = '10px';
       arg.el.style.borderWidth = '1px';
@@ -932,6 +1023,17 @@ function ensureCalendar() {
         setTimeout(() => {
           updateEventSelectionStyle(arg.event, true);
         }, 0);
+      }
+      
+      // Add double-click handler for showing task details
+      if (arg.el) {
+        arg.el.addEventListener('dblclick', () => {
+          const taskId = arg.event.extendedProps?.taskId;
+          if (taskId) {
+            console.log(`Double-clicked event ${arg.event.id}, showing task details`);
+            showTaskDetails(taskId);
+          }
+        });
       }
     },
 
@@ -1104,6 +1206,7 @@ function ensureCalendar() {
 
     eventDragStart: (info) => {
       els.unscheduledDrop.classList.add('active');
+      els.markDoneArea.classList.add('active');
       
       // If dragging an event that's not selected but there are other selected events,
       // clear the other selections and select only this one
@@ -1117,58 +1220,9 @@ function ensureCalendar() {
       console.log(`Current selections during drag: ${Array.from(selectedEvents).join(', ')}`);
     },
     
-    // Add double-click handler for showing task details
-    eventDidMount: (arg) => {
-      // Make label colors visible (background + border)
-      const c = arg.event.backgroundColor || arg.event.borderColor;
-      if (c) {
-        arg.el.style.backgroundColor = c;
-        arg.el.style.borderColor = c;
-      }
-      arg.el.style.borderRadius = '10px';
-      arg.el.style.borderWidth = '1px';
-      
-      // Add data attribute for easier selection
-      arg.el.setAttribute('data-event-id', arg.event.id);
-      
-      // Special styling for recurring projections
-      if (arg.event.extendedProps?.isProjection) {
-        // Add dashed border
-        arg.el.style.borderStyle = 'dashed';
-        
-        // Add a small recurring icon
-        const titleEl = arg.el.querySelector('.fc-event-title');
-        if (titleEl) {
-          const iconSpan = document.createElement('span');
-          iconSpan.innerHTML = ' ↻';
-          iconSpan.style.fontSize = '0.85em';
-          iconSpan.title = 'Recurring event projection';
-          titleEl.appendChild(iconSpan);
-        }
-      }
-      
-      // Restore selection state if this event was previously selected
-      if (selectedEvents.has(arg.event.id)) {
-        console.log(`Event ${arg.event.id} mounted and is selected, applying styling`);
-        // Use setTimeout to ensure the element is fully in the DOM
-        setTimeout(() => {
-          updateEventSelectionStyle(arg.event, true);
-        }, 0);
-      }
-      
-      // Add double-click handler for showing task details
-      if (arg.el) {
-        arg.el.addEventListener('dblclick', () => {
-          const taskId = arg.event.extendedProps?.taskId;
-          if (taskId) {
-            console.log(`Double-clicked event ${arg.event.id}, showing task details`);
-            showTaskDetails(taskId);
-          }
-        });
-      }
-    },
     eventDragStop: async (info) => {
       els.unscheduledDrop.classList.remove('active');
+      els.markDoneArea.classList.remove('active');
 
       // If dropped over the unscheduled dropzone, clear the date field.
       const cfg = config();
@@ -1177,6 +1231,46 @@ function ensureCalendar() {
 
       const { clientX, clientY } = info.jsEvent;
       const target = document.elementFromPoint(clientX, clientY);
+      
+      // Check if dropped over the mark done area
+      const overMarkDoneArea = target && target.closest('#markDoneArea');
+      if (overMarkDoneArea) {
+        // Check if this is part of a multi-selection
+        const isMultiSelection = selectedEvents.size > 1 && selectedEvents.has(info.event.id);
+        
+        if (isMultiSelection) {
+          // Get all selected task IDs
+          const selectedTaskIds = [];
+          for (const eventId of selectedEvents) {
+            const event = calendar.getEventById(eventId);
+            if (!event) continue;
+            
+            const eventTaskId = event.extendedProps?.taskId;
+            if (!eventTaskId) continue;
+            
+            // Skip recurring projections
+            if (event.extendedProps?.isProjection) continue;
+            
+            selectedTaskIds.push(eventTaskId);
+          }
+          
+          // Mark all selected tasks as done
+          if (selectedTaskIds.length > 0) {
+            await markMultipleTasksAsDone(selectedTaskIds);
+          }
+        } else {
+          // Mark single task as done
+          try {
+            await markTaskAsDone(taskId);
+            await loadEverything(); // Reload all tasks instead of just refreshing UI
+          } catch (e) {
+            console.error(e);
+            setStatus(String(e.message || e));
+          }
+        }
+        return;
+      }
+      
       const overDropzone = target && target.closest('#unscheduledDrop');
       if (!overDropzone) return;
 
@@ -1793,6 +1887,10 @@ els.dateField.addEventListener('change', async () => {
 // Dropzone highlighting for external drags (unscheduled -> calendar doesn't need this; calendar -> unscheduled handled above)
 els.unscheduledDrop.addEventListener('dragenter', () => els.unscheduledDrop.classList.add('active'));
 els.unscheduledDrop.addEventListener('dragleave', () => els.unscheduledDrop.classList.remove('active'));
+
+// Mark Done Area highlighting
+els.markDoneArea.addEventListener('dragenter', () => els.markDoneArea.classList.add('active'));
+els.markDoneArea.addEventListener('dragleave', () => els.markDoneArea.classList.remove('active'));
 // Function to toggle selection of an unscheduled task
 function toggleUnscheduledTaskSelection(taskEl, ctrlKey = false) {
   if (!taskEl) return;
@@ -2056,6 +2154,47 @@ recurringStyle.textContent = `
   /* Day color styles */
   .day-selected {
     box-shadow: inset 0 0 0 2px #ffcc00 !important;
+  }
+  
+  /* Mark Done Area styles */
+  .mark-done-area {
+    width: 120px;
+    border: 2px dashed #4caf50;
+    border-radius: 8px;
+    background-color: rgba(76, 175, 80, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    opacity: 0.7;
+  }
+  
+  .mark-done-area.active {
+    background-color: rgba(76, 175, 80, 0.3);
+    border-style: solid;
+    opacity: 1;
+    transform: scale(1.05);
+  }
+  
+  .mark-done-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 15px;
+  }
+  
+  .mark-done-icon {
+    font-size: 24px;
+    color: #4caf50;
+    margin-bottom: 10px;
+  }
+  
+  .mark-done-text {
+    color: #4caf50;
+    font-size: 12px;
+    font-weight: bold;
   }
   
   .color-btn {
