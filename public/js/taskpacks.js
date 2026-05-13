@@ -6,7 +6,8 @@ class TaskPacksApp {
             taskPacksProjectId: null,
             defaultDurationMinutes: 45,
             taskReloadIntervalMinutes: 5,
-            breakNotificationsEnabled: true
+            breakNotificationsEnabled: true,
+            sessionSyncIntervalSeconds: 10
         };
         this.currentDate = new Date().toISOString().split('T')[0];
         this.activeSession = null;
@@ -110,6 +111,7 @@ class TaskPacksApp {
             
             // Config
             taskReloadInterval: document.getElementById('task-reload-interval'),
+            sessionSyncInterval: document.getElementById('session-sync-interval'),
             
             // Reminders
             addReminderBtn: document.getElementById('add-reminder-btn'),
@@ -249,12 +251,16 @@ class TaskPacksApp {
         if (this.elements.taskReloadInterval) {
             this.elements.taskReloadInterval.value = this.config.taskReloadIntervalMinutes || 5;
         }
+        if (this.elements.sessionSyncInterval) {
+            this.elements.sessionSyncInterval.value = this.config.sessionSyncIntervalSeconds || 10;
+        }
     }
     
     async saveConfig() {
         this.config.taskPacksProjectId = parseInt(this.elements.taskPacksProject.value) || null;
         this.config.defaultDurationMinutes = parseInt(this.elements.defaultDuration.value) || 45;
         this.config.taskReloadIntervalMinutes = parseInt(this.elements.taskReloadInterval.value) || 5;
+        this.config.sessionSyncIntervalSeconds = parseInt(this.elements.sessionSyncInterval.value) || 10;
         this.config.breakNotificationsEnabled = this.elements.breakNotifications.checked;
         
         // If notifications are being enabled, request permission
@@ -1067,10 +1073,8 @@ class TaskPacksApp {
             this.startTimer();
             this.loadPacksForDate();
             
-            // Sync session state after starting timer to ensure correct values
-            setTimeout(() => {
-                this.syncSessionState();
-            }, 1000);
+            // Sync session state immediately to establish baseline
+            await this.syncSessionState();
             
             this.setStatus('Pack started');
         } catch (error) {
@@ -2163,12 +2167,13 @@ class TaskPacksApp {
     startSessionSyncTimer() {
         if (this.sessionSyncTimer) return;
         
-        // Sync session state every 10 seconds
+        // Use configurable sync interval (default 10 seconds)
+        const intervalMs = (this.config.sessionSyncIntervalSeconds || 10) * 1000;
         this.sessionSyncTimer = setInterval(() => {
             if (this.activeSession) {
                 this.syncSessionState();
             }
-        }, 10000);
+        }, intervalMs);
     }
     
     stopSessionSyncTimer() {
@@ -2182,24 +2187,30 @@ class TaskPacksApp {
         if (!this.activeSession) return;
         
         try {
-            // Calculate current elapsed time if timer is running
+            // Always calculate and store current elapsed time
             if (!this.timerPaused && this.timerStartTime) {
+                // Update elapsed time from timer
                 this.timerElapsed = Math.floor((Date.now() - this.timerStartTime) / 1000);
+                this.timerElapsed = Math.max(0, this.timerElapsed); // Ensure non-negative
             }
             
             // Update session with current timer state
             this.activeSession.totalElapsedSeconds = this.timerElapsed;
             this.activeSession.activeElapsedSeconds = this.calculateActiveElapsed();
+            this.activeSession.currentElapsedSeconds = this.timerElapsed; // Critical for restoration
             this.activeSession.lastSyncAt = new Date().toISOString();
             
-            // Store current elapsed time for restoration
-            this.activeSession.currentElapsedSeconds = this.timerElapsed;
+            // Also store the timer start time for debugging
+            if (this.timerStartTime) {
+                this.activeSession.timerStartTime = new Date(this.timerStartTime).toISOString();
+            }
             
             // Update the session in the database
             const sessionIndex = this.db.activitySessions.findIndex(s => s.id === this.activeSession.id);
             if (sessionIndex !== -1) {
                 this.db.activitySessions[sessionIndex] = { ...this.activeSession };
                 await this.saveDatabase();
+                console.log(`Session synced: ${this.timerElapsed}s elapsed`);
             }
         } catch (error) {
             console.error('Failed to sync session state:', error);
@@ -2234,24 +2245,35 @@ class TaskPacksApp {
                 } else {
                     elapsedSeconds = 0;
                 }
+                console.log(`Restoring paused session with ${elapsedSeconds}s elapsed`);
             } else {
-                // For running sessions, calculate actual elapsed time from start
-                const sessionStartTime = new Date(activeSession.startedAt);
-                const now = new Date();
-                let totalElapsedMs = now.getTime() - sessionStartTime.getTime();
-                
-                // Subtract completed pause intervals
-                let totalPausedMs = 0;
-                if (activeSession.pausedIntervals && Array.isArray(activeSession.pausedIntervals)) {
-                    for (const interval of activeSession.pausedIntervals) {
-                        if (interval.pausedAt && interval.resumedAt) {
-                            const pausedMs = new Date(interval.resumedAt).getTime() - new Date(interval.pausedAt).getTime();
-                            totalPausedMs += pausedMs;
+                // For running sessions, prefer stored elapsed time over calculation
+                if (activeSession.currentElapsedSeconds !== undefined && activeSession.currentElapsedSeconds >= 0) {
+                    // Use stored elapsed time and add time since last sync
+                    const lastSyncTime = activeSession.lastSyncAt ? new Date(activeSession.lastSyncAt) : new Date(activeSession.startedAt);
+                    const timeSinceSync = Math.floor((new Date().getTime() - lastSyncTime.getTime()) / 1000);
+                    elapsedSeconds = activeSession.currentElapsedSeconds + timeSinceSync;
+                    console.log(`Restoring running session: ${activeSession.currentElapsedSeconds}s stored + ${timeSinceSync}s since sync = ${elapsedSeconds}s total`);
+                } else {
+                    // Fallback: calculate from session start time
+                    const sessionStartTime = new Date(activeSession.startedAt);
+                    const now = new Date();
+                    let totalElapsedMs = now.getTime() - sessionStartTime.getTime();
+                    
+                    // Subtract completed pause intervals
+                    let totalPausedMs = 0;
+                    if (activeSession.pausedIntervals && Array.isArray(activeSession.pausedIntervals)) {
+                        for (const interval of activeSession.pausedIntervals) {
+                            if (interval.pausedAt && interval.resumedAt) {
+                                const pausedMs = new Date(interval.resumedAt).getTime() - new Date(interval.pausedAt).getTime();
+                                totalPausedMs += pausedMs;
+                            }
                         }
                     }
+                    
+                    elapsedSeconds = Math.floor((totalElapsedMs - totalPausedMs) / 1000);
+                    console.log(`Fallback calculation: ${elapsedSeconds}s elapsed`);
                 }
-                
-                elapsedSeconds = Math.floor((totalElapsedMs - totalPausedMs) / 1000);
             }
             
             // Ensure elapsed time is reasonable (not negative or excessively large)
