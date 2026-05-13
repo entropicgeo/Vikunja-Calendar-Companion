@@ -380,7 +380,7 @@ function getRelativeLuminance(hexColor) {
 
 function getTextColorForBackground(backgroundColor) {
   const luminance = getRelativeLuminance(backgroundColor);
-  return luminance > 0.179 ? '#000000' : '#ffffff';
+  return luminance > 0.5 ? '#000000' : '#ffffff';
 }
 
 function ensureLabelSelectionDefaults(allLabels) {
