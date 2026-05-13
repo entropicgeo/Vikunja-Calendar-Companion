@@ -5,6 +5,7 @@ class TaskPacksApp {
         this.config = {
             taskPacksProjectId: null,
             defaultDurationMinutes: 45,
+            taskReloadIntervalMinutes: 5,
             breakNotificationsEnabled: true
         };
         this.currentDate = new Date().toISOString().split('T')[0];
@@ -14,6 +15,8 @@ class TaskPacksApp {
         this.timerElapsed = 0;
         this.timerPaused = false;
         this.notificationPermission = 'default';
+        this.taskReloadTimer = null;
+        this.selectedPackTasks = new Set();
         
         this.elements = {
             packDate: document.getElementById('pack-date'),
@@ -74,7 +77,37 @@ class TaskPacksApp {
             ratingModal: document.getElementById('rating-modal'),
             ratingForm: document.getElementById('rating-form'),
             ratingModalClose: document.getElementById('rating-modal-close'),
-            ratingCancel: document.getElementById('rating-cancel')
+            ratingCancel: document.getElementById('rating-cancel'),
+            
+            // Active pack tasks
+            activePackTasks: document.getElementById('active-pack-tasks'),
+            packTasksList: document.getElementById('pack-tasks-list'),
+            selectAllTasksBtn: document.getElementById('select-all-tasks-btn'),
+            clearTaskSelectionBtn: document.getElementById('clear-task-selection-btn'),
+            markSelectedDoneBtn: document.getElementById('mark-selected-done-btn'),
+            
+            // Completion modal
+            completionModal: document.getElementById('completion-modal'),
+            completionModalClose: document.getElementById('completion-modal-close'),
+            completionCancel: document.getElementById('completion-cancel'),
+            markPackDone: document.getElementById('mark-pack-done'),
+            markAllSubtasksDone: document.getElementById('mark-all-subtasks-done'),
+            remainingTasksSection: document.getElementById('remaining-tasks-section'),
+            remainingTasksList: document.getElementById('remaining-tasks-list'),
+            completeSessionBtn: document.getElementById('complete-session-btn'),
+            
+            // Task details modal
+            taskDetailsModal: document.getElementById('task-details-modal'),
+            taskDetailsTitle: document.getElementById('task-details-title'),
+            taskDetailsMeta: document.getElementById('task-details-meta'),
+            taskDetailsDescription: document.getElementById('task-details-description'),
+            taskDetailsGrid: document.getElementById('task-details-grid'),
+            taskDetailsOpenLink: document.getElementById('task-details-open-link'),
+            taskDetailsProjectLink: document.getElementById('task-details-project-link'),
+            taskDetailsClose: document.getElementById('task-details-close'),
+            
+            // Config
+            taskReloadInterval: document.getElementById('task-reload-interval')
         };
         
         this.allTasks = [];
@@ -96,6 +129,7 @@ class TaskPacksApp {
         try {
             await this.initDatabase();
             await this.loadConfig();
+            await this.loadServerConfig();
             await this.seedDefaultData();
             this.setupEventListeners();
             this.elements.packDate.value = this.currentDate;
@@ -105,6 +139,17 @@ class TaskPacksApp {
         } catch (error) {
             console.error('Failed to initialize Task Packs:', error);
             this.setStatus('Failed to initialize Task Packs', 'error');
+        }
+    }
+    
+    async loadServerConfig() {
+        try {
+            const response = await fetch('/api/config');
+            if (response.ok) {
+                this.serverConfig = await response.json();
+            }
+        } catch (error) {
+            console.error('Failed to load server config:', error);
         }
     }
     
@@ -162,11 +207,15 @@ class TaskPacksApp {
         if (this.elements.breakNotifications) {
             this.elements.breakNotifications.checked = this.config.breakNotificationsEnabled !== false;
         }
+        if (this.elements.taskReloadInterval) {
+            this.elements.taskReloadInterval.value = this.config.taskReloadIntervalMinutes || 5;
+        }
     }
     
     async saveConfig() {
         this.config.taskPacksProjectId = parseInt(this.elements.taskPacksProject.value) || null;
         this.config.defaultDurationMinutes = parseInt(this.elements.defaultDuration.value) || 45;
+        this.config.taskReloadIntervalMinutes = parseInt(this.elements.taskReloadInterval.value) || 5;
         this.config.breakNotificationsEnabled = this.elements.breakNotifications.checked;
         
         // If notifications are being enabled, request permission
@@ -345,8 +394,23 @@ class TaskPacksApp {
             this.saveRating();
         });
         
+        // Active pack task management
+        this.elements.selectAllTasksBtn.addEventListener('click', () => this.selectAllPackTasks());
+        this.elements.clearTaskSelectionBtn.addEventListener('click', () => this.clearPackTaskSelection());
+        this.elements.markSelectedDoneBtn.addEventListener('click', () => this.markSelectedTasksDone());
+        
+        // Completion modal
+        this.elements.completionModalClose.addEventListener('click', () => this.hideCompletionModal());
+        this.elements.completionCancel.addEventListener('click', () => this.hideCompletionModal());
+        this.elements.markAllSubtasksDone.addEventListener('change', () => this.toggleRemainingTasksSection());
+        this.elements.completeSessionBtn.addEventListener('click', () => this.completeSessionWithOptions());
+        
+        // Task details modal
+        this.elements.taskDetailsClose.addEventListener('click', () => this.hideTaskDetailsModal());
+        
         // Modal backdrop clicks
-        [this.elements.contextModal, this.elements.strategyModal, this.elements.ratingModal].forEach(modal => {
+        [this.elements.contextModal, this.elements.strategyModal, this.elements.ratingModal, 
+         this.elements.completionModal, this.elements.taskDetailsModal].forEach(modal => {
             if (modal) {
                 modal.addEventListener('click', (e) => {
                     if (e.target === modal) {
@@ -864,11 +928,15 @@ class TaskPacksApp {
         this.elements.activePackPanel.style.display = 'block';
         this.updateTimerDisplay();
         this.updateBreakInfo();
+        this.loadActivePackTasks();
+        this.startTaskReloadTimer();
     }
     
     hideActivePackPanel() {
         this.elements.activePackPanel.style.display = 'none';
         this.stopTimer();
+        this.stopTaskReloadTimer();
+        this.selectedPackTasks.clear();
     }
     
     startTimer() {
@@ -935,32 +1003,11 @@ class TaskPacksApp {
         
         try {
             this.stopTimer();
+            this.stopTaskReloadTimer();
             
-            // Complete the session
-            this.activeSession.endedAt = new Date().toISOString();
-            this.activeSession.status = 'completed';
-            this.activeSession.totalElapsedSeconds = this.timerElapsed;
-            this.activeSession.activeElapsedSeconds = this.calculateActiveElapsed();
+            // Show completion modal first
+            this.showCompletionModal();
             
-            // Update pack status
-            const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
-            if (pack) {
-                pack.status = 'completed';
-                pack.completedAt = new Date().toISOString();
-                pack.updatedAt = new Date().toISOString();
-            }
-            
-            await this.saveDatabase();
-            
-            // Show rating modal
-            this.showRatingModal();
-            
-            this.activeSession = null;
-            this.timerElapsed = 0;
-            this.hideActivePackPanel();
-            this.loadPacksForDate();
-            
-            this.setStatus('Session completed');
         } catch (error) {
             console.error('Failed to stop session:', error);
             this.setStatus('Failed to stop session', 'error');
@@ -1705,6 +1752,385 @@ class TaskPacksApp {
             });
         } catch (error) {
             // Ignore errors - sound is optional
+        }
+    }
+    
+    // Task reload timer
+    startTaskReloadTimer() {
+        if (this.taskReloadTimer) return;
+        
+        const intervalMs = (this.config.taskReloadIntervalMinutes || 5) * 60 * 1000;
+        this.taskReloadTimer = setInterval(() => {
+            this.reloadActivePackTasks();
+        }, intervalMs);
+    }
+    
+    stopTaskReloadTimer() {
+        if (this.taskReloadTimer) {
+            clearInterval(this.taskReloadTimer);
+            this.taskReloadTimer = null;
+        }
+    }
+    
+    async reloadActivePackTasks() {
+        if (!this.activeSession) return;
+        
+        try {
+            // Reload tasks from Vikunja
+            await this.loadTasks();
+            this.loadActivePackTasks();
+        } catch (error) {
+            console.error('Failed to reload tasks:', error);
+        }
+    }
+    
+    // Active pack task management
+    async loadActivePackTasks() {
+        if (!this.activeSession) return;
+        
+        const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
+        if (!pack) return;
+        
+        const tasks = pack.subtaskIds.map(id => 
+            this.allTasks.find(t => t.id === id)
+        ).filter(Boolean);
+        
+        this.renderActivePackTasks(tasks);
+    }
+    
+    renderActivePackTasks(tasks) {
+        if (tasks.length === 0) {
+            this.elements.packTasksList.innerHTML = '<div class="loading">No tasks in this pack</div>';
+            return;
+        }
+        
+        this.elements.packTasksList.innerHTML = tasks.map(task => {
+            const isDone = task.done || false;
+            const isSelected = this.selectedPackTasks.has(task.id);
+            
+            return `
+                <div class="pack-task-item ${isDone ? 'done' : ''} ${isSelected ? 'selected' : ''}" 
+                     data-task-id="${task.id}">
+                    <input type="checkbox" class="pack-task-checkbox" 
+                           ${isSelected ? 'checked' : ''} 
+                           ${isDone ? 'disabled' : ''}>
+                    <div class="pack-task-content">
+                        <div class="pack-task-title">${this.escapeHtml(task.title || `Task ${task.id}`)}</div>
+                        <div class="pack-task-meta">Project: ${task.project_id || 'None'}</div>
+                    </div>
+                    <div class="pack-task-status ${isDone ? 'done' : 'pending'}">
+                        ${isDone ? 'Done' : 'Pending'}
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        // Add event listeners
+        this.elements.packTasksList.querySelectorAll('.pack-task-item').forEach(item => {
+            const taskId = parseInt(item.dataset.taskId);
+            const checkbox = item.querySelector('.pack-task-checkbox');
+            const isDone = item.classList.contains('done');
+            
+            if (!isDone) {
+                // Click handler for selection
+                item.addEventListener('click', (e) => {
+                    if (e.target !== checkbox) {
+                        checkbox.checked = !checkbox.checked;
+                    }
+                    this.togglePackTaskSelection(taskId, checkbox.checked);
+                });
+                
+                checkbox.addEventListener('change', () => {
+                    this.togglePackTaskSelection(taskId, checkbox.checked);
+                });
+            }
+            
+            // Double-click to show task details
+            item.addEventListener('dblclick', () => {
+                this.showTaskDetails(taskId);
+            });
+        });
+        
+        this.updatePackTaskActions();
+    }
+    
+    togglePackTaskSelection(taskId, selected) {
+        if (selected) {
+            this.selectedPackTasks.add(taskId);
+        } else {
+            this.selectedPackTasks.delete(taskId);
+        }
+        
+        // Update UI
+        const item = this.elements.packTasksList.querySelector(`[data-task-id="${taskId}"]`);
+        if (item) {
+            item.classList.toggle('selected', selected);
+            const checkbox = item.querySelector('.pack-task-checkbox');
+            if (checkbox) checkbox.checked = selected;
+        }
+        
+        this.updatePackTaskActions();
+    }
+    
+    selectAllPackTasks() {
+        const items = this.elements.packTasksList.querySelectorAll('.pack-task-item:not(.done)');
+        items.forEach(item => {
+            const taskId = parseInt(item.dataset.taskId);
+            const checkbox = item.querySelector('.pack-task-checkbox');
+            if (checkbox && !checkbox.disabled) {
+                checkbox.checked = true;
+                this.selectedPackTasks.add(taskId);
+                item.classList.add('selected');
+            }
+        });
+        this.updatePackTaskActions();
+    }
+    
+    clearPackTaskSelection() {
+        this.selectedPackTasks.clear();
+        this.elements.packTasksList.querySelectorAll('.pack-task-item').forEach(item => {
+            item.classList.remove('selected');
+            const checkbox = item.querySelector('.pack-task-checkbox');
+            if (checkbox) checkbox.checked = false;
+        });
+        this.updatePackTaskActions();
+    }
+    
+    updatePackTaskActions() {
+        const hasSelection = this.selectedPackTasks.size > 0;
+        this.elements.markSelectedDoneBtn.disabled = !hasSelection;
+    }
+    
+    async markSelectedTasksDone() {
+        if (this.selectedPackTasks.size === 0) return;
+        
+        try {
+            this.setStatus(`Marking ${this.selectedPackTasks.size} tasks as done...`);
+            
+            let successCount = 0;
+            for (const taskId of this.selectedPackTasks) {
+                try {
+                    await this.markTaskAsDone(taskId);
+                    successCount++;
+                } catch (error) {
+                    console.error(`Failed to mark task ${taskId} as done:`, error);
+                }
+            }
+            
+            this.selectedPackTasks.clear();
+            await this.reloadActivePackTasks();
+            
+            this.setStatus(`Marked ${successCount} tasks as done`);
+        } catch (error) {
+            console.error('Failed to mark tasks as done:', error);
+            this.setStatus('Failed to mark tasks as done', 'error');
+        }
+    }
+    
+    async markTaskAsDone(taskId) {
+        const response = await fetch(`/api/tasks/${taskId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ done: true })
+        });
+        
+        if (!response.ok) {
+            const error = await response.text();
+            throw new Error(`Failed to mark task ${taskId} as done: ${error}`);
+        }
+        
+        return await response.json();
+    }
+    
+    // Task details modal
+    async showTaskDetails(taskId) {
+        try {
+            this.setStatus(`Loading task ${taskId}...`);
+            
+            // Get fresh task data
+            const response = await fetch(`/api/tasks/${taskId}`);
+            if (!response.ok) {
+                throw new Error(`Failed to load task: ${response.status}`);
+            }
+            
+            const task = await response.json();
+            
+            // Update modal content
+            this.elements.taskDetailsTitle.textContent = task.title || `Task ${taskId}`;
+            this.elements.taskDetailsMeta.textContent = `#${taskId} • Project: ${task.project_id || 'None'}`;
+            
+            // Description
+            this.elements.taskDetailsDescription.textContent = task.description || '';
+            
+            // Details grid
+            this.elements.taskDetailsGrid.innerHTML = `
+                <div class="detail-label">Priority:</div>
+                <div class="detail-value">${task.priority || '—'}</div>
+                <div class="detail-label">Due Date:</div>
+                <div class="detail-value">${task.due_date ? new Date(task.due_date).toLocaleDateString() : '—'}</div>
+                <div class="detail-label">Created:</div>
+                <div class="detail-value">${task.created ? new Date(task.created).toLocaleDateString() : '—'}</div>
+                <div class="detail-label">Status:</div>
+                <div class="detail-value">${task.done ? 'Done' : 'Pending'}</div>
+            `;
+            
+            // Links
+            this.elements.taskDetailsOpenLink.href = this.getTaskUrl(taskId);
+            if (task.project_id) {
+                this.elements.taskDetailsProjectLink.href = this.getProjectUrl(task.project_id);
+                this.elements.taskDetailsProjectLink.style.display = '';
+            } else {
+                this.elements.taskDetailsProjectLink.style.display = 'none';
+            }
+            
+            this.elements.taskDetailsModal.classList.add('show');
+            this.setStatus('');
+        } catch (error) {
+            console.error('Failed to load task details:', error);
+            this.setStatus('Failed to load task details', 'error');
+        }
+    }
+    
+    hideTaskDetailsModal() {
+        this.elements.taskDetailsModal.classList.remove('show');
+    }
+    
+    getTaskUrl(taskId) {
+        // Use server config base URL if available
+        const baseUrl = this.serverConfig?.baseUrl || '';
+        const uiBaseUrl = baseUrl.replace(/\/api\/v1\/?$/, '');
+        return `${uiBaseUrl}/tasks/${taskId}`;
+    }
+    
+    getProjectUrl(projectId) {
+        const baseUrl = this.serverConfig?.baseUrl || '';
+        const uiBaseUrl = baseUrl.replace(/\/api\/v1\/?$/, '');
+        return `${uiBaseUrl}/projects/${projectId}`;
+    }
+    
+    // Completion modal
+    showCompletionModal() {
+        // Reset to defaults
+        this.elements.markPackDone.checked = true;
+        this.elements.markAllSubtasksDone.checked = true;
+        this.toggleRemainingTasksSection();
+        
+        this.elements.completionModal.classList.add('show');
+    }
+    
+    hideCompletionModal() {
+        this.elements.completionModal.classList.remove('show');
+    }
+    
+    toggleRemainingTasksSection() {
+        const showSection = !this.elements.markAllSubtasksDone.checked;
+        this.elements.remainingTasksSection.style.display = showSection ? 'block' : 'none';
+        
+        if (showSection) {
+            this.loadRemainingTasks();
+        }
+    }
+    
+    loadRemainingTasks() {
+        if (!this.activeSession) return;
+        
+        const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
+        if (!pack) return;
+        
+        const tasks = pack.subtaskIds.map(id => 
+            this.allTasks.find(t => t.id === id)
+        ).filter(task => task && !task.done);
+        
+        this.elements.remainingTasksList.innerHTML = tasks.map(task => `
+            <div class="remaining-task-item">
+                <input type="checkbox" class="remaining-task-checkbox" value="${task.id}" checked>
+                <div class="remaining-task-title">${this.escapeHtml(task.title || `Task ${task.id}`)}</div>
+            </div>
+        `).join('');
+        
+        // Add click handlers
+        this.elements.remainingTasksList.querySelectorAll('.remaining-task-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (e.target.type !== 'checkbox') {
+                    const checkbox = item.querySelector('.remaining-task-checkbox');
+                    checkbox.checked = !checkbox.checked;
+                }
+            });
+        });
+    }
+    
+    async completeSessionWithOptions() {
+        if (!this.activeSession) return;
+        
+        try {
+            this.setStatus('Completing session...');
+            
+            const markPackDone = this.elements.markPackDone.checked;
+            const markAllSubtasksDone = this.elements.markAllSubtasksDone.checked;
+            
+            // Get selected remaining tasks if not marking all
+            let tasksToMarkDone = [];
+            if (markAllSubtasksDone) {
+                const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
+                if (pack) {
+                    tasksToMarkDone = pack.subtaskIds.filter(id => {
+                        const task = this.allTasks.find(t => t.id === id);
+                        return task && !task.done;
+                    });
+                }
+            } else {
+                tasksToMarkDone = Array.from(this.elements.remainingTasksList.querySelectorAll('.remaining-task-checkbox:checked'))
+                    .map(cb => parseInt(cb.value));
+            }
+            
+            // Mark selected tasks as done
+            for (const taskId of tasksToMarkDone) {
+                try {
+                    await this.markTaskAsDone(taskId);
+                } catch (error) {
+                    console.error(`Failed to mark task ${taskId} as done:`, error);
+                }
+            }
+            
+            // Mark pack task as done if requested
+            if (markPackDone) {
+                try {
+                    await this.markTaskAsDone(this.activeSession.vikunjaParentTaskId);
+                } catch (error) {
+                    console.error('Failed to mark pack task as done:', error);
+                }
+            }
+            
+            // Complete the session
+            this.activeSession.endedAt = new Date().toISOString();
+            this.activeSession.status = 'completed';
+            this.activeSession.totalElapsedSeconds = this.timerElapsed;
+            this.activeSession.activeElapsedSeconds = this.calculateActiveElapsed();
+            
+            // Update pack status
+            const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
+            if (pack) {
+                pack.status = 'completed';
+                pack.completedAt = new Date().toISOString();
+                pack.updatedAt = new Date().toISOString();
+            }
+            
+            await this.saveDatabase();
+            
+            this.hideCompletionModal();
+            
+            // Show rating modal
+            this.showRatingModal();
+            
+            this.activeSession = null;
+            this.timerElapsed = 0;
+            this.hideActivePackPanel();
+            this.loadPacksForDate();
+            
+            this.setStatus('Session completed');
+        } catch (error) {
+            console.error('Failed to complete session:', error);
+            this.setStatus('Failed to complete session', 'error');
         }
     }
     

@@ -54,6 +54,21 @@
                     <button id="stop-btn" class="btn btn-danger">Stop</button>
                     <button id="break-now-btn" class="btn btn-secondary">Break Now</button>
                 </div>
+                
+                <!-- Active Pack Tasks -->
+                <div class="active-pack-tasks" id="active-pack-tasks">
+                    <div class="tasks-header">
+                        <h4>Tasks in this pack</h4>
+                        <div class="task-actions">
+                            <button id="select-all-tasks-btn" class="btn btn-secondary btn-sm">Select All</button>
+                            <button id="clear-task-selection-btn" class="btn btn-secondary btn-sm">Clear</button>
+                            <button id="mark-selected-done-btn" class="btn btn-success btn-sm" disabled>Mark Selected Done</button>
+                        </div>
+                    </div>
+                    <div class="pack-tasks-list" id="pack-tasks-list">
+                        <div class="loading">Loading tasks...</div>
+                    </div>
+                </div>
             </div>
 
             <div class="packs-list" id="packs-list">
@@ -171,6 +186,11 @@
                     <input type="number" id="default-duration" value="45" min="1">
                 </div>
                 <div class="form-group">
+                    <label for="task-reload-interval">Task reload interval (minutes):</label>
+                    <input type="number" id="task-reload-interval" value="5" min="1" max="60">
+                    <small>How often to reload tasks from Vikunja during active sessions</small>
+                </div>
+                <div class="form-group">
                     <label>
                         <input type="checkbox" id="break-notifications">
                         Enable break notifications by default
@@ -266,6 +286,38 @@
         </div>
     </div>
 
+    <!-- Completion Modal -->
+    <div class="modal" id="completion-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Complete Session</h3>
+                <button class="modal-close" id="completion-modal-close">&times;</button>
+            </div>
+            <div class="completion-content">
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="mark-pack-done" checked>
+                        Mark task pack as done
+                    </label>
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="mark-all-subtasks-done" checked>
+                        Mark all remaining subtasks as done
+                    </label>
+                </div>
+                <div class="remaining-tasks-section" id="remaining-tasks-section" style="display: none;">
+                    <h4>Select tasks to mark as done:</h4>
+                    <div class="remaining-tasks-list" id="remaining-tasks-list"></div>
+                </div>
+                <div class="form-actions">
+                    <button id="complete-session-btn" class="btn btn-primary">Complete Session</button>
+                    <button type="button" class="btn btn-secondary" id="completion-cancel">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Rating Modal -->
     <div class="modal" id="rating-modal">
         <div class="modal-content">
@@ -303,6 +355,33 @@
                     <button type="button" class="btn btn-secondary" id="rating-cancel">Cancel</button>
                 </div>
             </form>
+        </div>
+    </div>
+
+    <!-- Task Details Modal -->
+    <div class="modal" id="task-details-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h3 id="task-details-title">Task Details</h3>
+                    <div id="task-details-meta" class="task-details-meta"></div>
+                </div>
+                <div class="modal-header-actions">
+                    <a id="task-details-open-link" target="_blank" class="btn btn-secondary btn-sm">Open in Vikunja</a>
+                    <a id="task-details-project-link" target="_blank" class="btn btn-secondary btn-sm">Open Project</a>
+                    <button class="modal-close" id="task-details-close">&times;</button>
+                </div>
+            </div>
+            <div class="task-details-content">
+                <div class="form-group">
+                    <label>Description:</label>
+                    <div id="task-details-description" class="task-description"></div>
+                </div>
+                <div class="form-group">
+                    <label>Details:</label>
+                    <div id="task-details-grid" class="task-details-grid"></div>
+                </div>
+            </div>
         </div>
     </div>
 
