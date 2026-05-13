@@ -17,6 +17,7 @@ class TaskPacksApp {
         this.notificationPermission = 'default';
         this.taskReloadTimer = null;
         this.selectedPackTasks = new Set();
+        this.completedSession = null; // Store completed session for rating
         
         this.elements = {
             packDate: document.getElementById('pack-date'),
@@ -1400,9 +1401,10 @@ class TaskPacksApp {
     }
     
     populateRatingModal() {
-        if (!this.activeSession) return;
+        const session = this.completedSession || this.activeSession;
+        if (!session) return;
         
-        const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
+        const pack = this.packs.find(p => p.id === session.taskPackId);
         if (!pack) return;
         
         // Populate activity context info
@@ -1432,9 +1434,10 @@ class TaskPacksApp {
     }
     
     populateIndividualStrategyRatings() {
-        if (!this.activeSession) return;
+        const session = this.completedSession || this.activeSession;
+        if (!session) return;
         
-        const strategies = this.activeSession.breakStrategyIds.map(id =>
+        const strategies = session.breakStrategyIds.map(id =>
             this.strategies.find(s => s.id === id)
         ).filter(Boolean);
         
@@ -1497,15 +1500,16 @@ class TaskPacksApp {
         try {
             console.log('saveRating called');
             
-            if (!this.activeSession) {
-                console.log('No active session found');
-                this.setStatus('No active session found', 'error');
+            const session = this.completedSession || this.activeSession;
+            if (!session) {
+                console.log('No session found for rating');
+                this.setStatus('No session found for rating', 'error');
                 return;
             }
             
-            const pack = this.packs.find(p => p.id === this.activeSession.taskPackId);
+            const pack = this.packs.find(p => p.id === session.taskPackId);
             if (!pack) {
-                console.log('Pack not found for active session');
+                console.log('Pack not found for session');
                 this.setStatus('Pack not found', 'error');
                 return;
             }
@@ -1521,8 +1525,8 @@ class TaskPacksApp {
             if (helpfulness || timingFit || notes) {
                 ratings.push({
                     id: this.generateId(),
-                    taskPackId: this.activeSession.taskPackId,
-                    activitySessionId: this.activeSession.id,
+                    taskPackId: session.taskPackId,
+                    activitySessionId: session.id,
                     ratingType: 'overall_pack_strategy',
                     helpfulness: helpfulness ? parseInt(helpfulness) : null,
                     timingFit: timingFit ? parseInt(timingFit) : null,
@@ -1538,8 +1542,8 @@ class TaskPacksApp {
             if ((contextFit || contextNotes) && pack.activityContextId) {
                 ratings.push({
                     id: this.generateId(),
-                    taskPackId: this.activeSession.taskPackId,
-                    activitySessionId: this.activeSession.id,
+                    taskPackId: session.taskPackId,
+                    activitySessionId: session.id,
                     activityContextId: pack.activityContextId,
                     ratingType: 'activity_context_fit',
                     contextFit: contextFit ? parseInt(contextFit) : null,
@@ -1556,8 +1560,8 @@ class TaskPacksApp {
             if ((labelFit || labelNotes) && packLabel) {
                 ratings.push({
                     id: this.generateId(),
-                    taskPackId: this.activeSession.taskPackId,
-                    activitySessionId: this.activeSession.id,
+                    taskPackId: session.taskPackId,
+                    activitySessionId: session.id,
                     labelId: packLabel.id,
                     ratingType: 'task_type_fit',
                     labelFit: labelFit ? parseInt(labelFit) : null,
@@ -1567,7 +1571,7 @@ class TaskPacksApp {
             }
             
             // Individual strategy ratings
-            const strategies = this.activeSession.breakStrategyIds.map(id =>
+            const strategies = session.breakStrategyIds.map(id =>
                 this.strategies.find(s => s.id === id)
             ).filter(Boolean);
             
@@ -1580,8 +1584,8 @@ class TaskPacksApp {
                 if (effectiveness || ease || timing || strategyNotes) {
                     ratings.push({
                         id: this.generateId(),
-                        taskPackId: this.activeSession.taskPackId,
-                        activitySessionId: this.activeSession.id,
+                        taskPackId: session.taskPackId,
+                        activitySessionId: session.id,
                         breakStrategyId: strategy.id,
                         activityContextId: pack.activityContextId,
                         labelId: packLabel?.id || null,
@@ -1607,6 +1611,9 @@ class TaskPacksApp {
             
             this.hideRatingModal();
             this.setStatus(`Saved ${ratings.length} rating${ratings.length !== 1 ? 's' : ''}`);
+            
+            // Clear completed session after rating is saved
+            this.completedSession = null;
             
             console.log('Ratings saved successfully');
         } catch (error) {
@@ -2430,6 +2437,9 @@ class TaskPacksApp {
             await this.saveDatabase();
             
             this.hideCompletionModal();
+            
+            // Store completed session for rating modal
+            this.completedSession = { ...this.activeSession };
             
             // Show rating modal
             this.showRatingModal();
