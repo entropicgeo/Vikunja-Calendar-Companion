@@ -113,6 +113,15 @@ class TaskPacksApp {
             // Reminders
             addReminderBtn: document.getElementById('add-reminder-btn'),
             remindersList: document.getElementById('reminders-list'),
+            
+            // Review
+            reviewFilterType: document.getElementById('review-filter-type'),
+            reviewFilterContext: document.getElementById('review-filter-context'),
+            reviewViewMode: document.getElementById('review-view-mode'),
+            reviewIndividual: document.getElementById('review-individual'),
+            reviewAggregated: document.getElementById('review-aggregated'),
+            ratingsList: document.getElementById('ratings-list'),
+            aggregatedRatings: document.getElementById('aggregated-ratings'),
             reminderModal: document.getElementById('reminder-modal'),
             reminderForm: document.getElementById('reminder-form'),
             reminderModalClose: document.getElementById('reminder-modal-close'),
@@ -453,6 +462,11 @@ class TaskPacksApp {
         this.elements.taskSearch.addEventListener('focus', () => this.searchTasksForReminder('task-search'));
         this.elements.taskSearchDelay.addEventListener('focus', () => this.searchTasksForReminder('task-search-delay'));
         
+        // Review
+        this.elements.reviewFilterType.addEventListener('change', () => this.filterAndRenderReview());
+        this.elements.reviewFilterContext.addEventListener('change', () => this.filterAndRenderReview());
+        this.elements.reviewViewMode.addEventListener('change', () => this.toggleReviewViewMode());
+        
         // Modal backdrop clicks
         [this.elements.contextModal, this.elements.strategyModal, this.elements.ratingModal, 
          this.elements.completionModal, this.elements.taskDetailsModal, this.elements.reminderModal].forEach(modal => {
@@ -482,6 +496,8 @@ class TaskPacksApp {
             this.loadCreatePackData();
         } else if (tabName === 'reminders') {
             this.renderReminders();
+        } else if (tabName === 'review') {
+            this.loadReviewData();
         } else if (tabName === 'contexts') {
             this.renderContexts();
         } else if (tabName === 'strategies') {
@@ -3136,6 +3152,272 @@ class TaskPacksApp {
             } catch (error) {
                 console.error(`Failed to check task ${reminder.targetTaskId} for reminder:`, error);
             }
+        }
+    }
+    
+    // Review Tab Methods
+    loadReviewData() {
+        // Populate context filter
+        this.elements.reviewFilterContext.innerHTML = '<option value="">All Contexts</option>';
+        this.contexts.forEach(context => {
+            const option = document.createElement('option');
+            option.value = context.id;
+            option.textContent = context.name;
+            this.elements.reviewFilterContext.appendChild(option);
+        });
+        
+        this.filterAndRenderReview();
+    }
+    
+    filterAndRenderReview() {
+        const filterType = this.elements.reviewFilterType.value;
+        const filterContext = this.elements.reviewFilterContext.value;
+        
+        let filteredRatings = [...(this.db.strategyRatings || [])];
+        
+        // Filter by rating type
+        if (filterType !== 'all') {
+            filteredRatings = filteredRatings.filter(rating => rating.ratingType === filterType);
+        }
+        
+        // Filter by activity context
+        if (filterContext) {
+            filteredRatings = filteredRatings.filter(rating => rating.activityContextId === filterContext);
+        }
+        
+        // Sort by creation date (newest first)
+        filteredRatings.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        
+        this.renderIndividualRatings(filteredRatings);
+        
+        // Update aggregated view if it's active
+        if (this.elements.reviewViewMode.value === 'aggregated') {
+            this.renderAggregatedRatings(filteredRatings);
+        }
+    }
+    
+    toggleReviewViewMode() {
+        const mode = this.elements.reviewViewMode.value;
+        
+        if (mode === 'individual') {
+            this.elements.reviewIndividual.style.display = 'block';
+            this.elements.reviewAggregated.style.display = 'none';
+        } else {
+            this.elements.reviewIndividual.style.display = 'none';
+            this.elements.reviewAggregated.style.display = 'block';
+            this.filterAndRenderReview(); // Refresh aggregated view
+        }
+    }
+    
+    renderIndividualRatings(ratings) {
+        if (ratings.length === 0) {
+            this.elements.ratingsList.innerHTML = '<div class="loading">No ratings found</div>';
+            return;
+        }
+        
+        this.elements.ratingsList.innerHTML = ratings.map(rating => {
+            const pack = this.packs.find(p => p.id === rating.taskPackId);
+            const context = this.contexts.find(c => c.id === rating.activityContextId);
+            const strategy = this.strategies.find(s => s.id === rating.breakStrategyId);
+            const label = this.allLabels.find(l => l.id === rating.labelId);
+            
+            let title = 'Unknown Rating';
+            let meta = '';
+            let scores = [];
+            
+            if (rating.ratingType === 'overall_pack_strategy') {
+                title = pack ? pack.title : 'Unknown Pack';
+                meta = `Overall session rating • ${new Date(rating.createdAt).toLocaleDateString()}`;
+                if (rating.helpfulness) scores.push({ label: 'Helpfulness', value: rating.helpfulness });
+                if (rating.timingFit) scores.push({ label: 'Timing Fit', value: rating.timingFit });
+            } else if (rating.ratingType === 'activity_context_fit') {
+                title = context ? context.name : 'Unknown Context';
+                meta = `Context rating • ${new Date(rating.createdAt).toLocaleDateString()}`;
+                if (rating.contextFit) scores.push({ label: 'Context Fit', value: rating.contextFit });
+            } else if (rating.ratingType === 'task_type_fit') {
+                title = label ? label.title : 'Unknown Task Type';
+                meta = `Task type rating • ${new Date(rating.createdAt).toLocaleDateString()}`;
+                if (rating.labelFit) scores.push({ label: 'Task Type Fit', value: rating.labelFit });
+            } else if (rating.ratingType === 'break_strategy') {
+                title = strategy ? strategy.name : 'Unknown Strategy';
+                meta = `Strategy rating • ${new Date(rating.createdAt).toLocaleDateString()}`;
+                if (rating.effectiveness) scores.push({ label: 'Effectiveness', value: rating.effectiveness });
+                if (rating.ease) scores.push({ label: 'Ease', value: rating.ease });
+                if (rating.timing) scores.push({ label: 'Timing', value: rating.timing });
+            }
+            
+            const scoresHtml = scores.map(score => `
+                <div class="rating-score">
+                    <div class="rating-score-label">${score.label}</div>
+                    <div class="rating-score-value">${score.value}/5</div>
+                </div>
+            `).join('');
+            
+            return `
+                <div class="rating-item">
+                    <div class="rating-item-header">
+                        <div>
+                            <div class="rating-item-title">${this.escapeHtml(title)}</div>
+                            <div class="rating-item-meta">${meta}</div>
+                        </div>
+                        <div class="rating-item-type">${rating.ratingType.replace('_', ' ')}</div>
+                    </div>
+                    
+                    ${scores.length > 0 ? `<div class="rating-item-scores">${scoresHtml}</div>` : ''}
+                    
+                    ${rating.notes ? `<div class="rating-item-notes">${this.escapeHtml(rating.notes)}</div>` : ''}
+                    
+                    <div class="rating-item-actions">
+                        <button class="btn btn-secondary btn-sm" onclick="taskPacksApp.editRating('${rating.id}')">Edit</button>
+                        <button class="btn btn-danger btn-sm" onclick="taskPacksApp.deleteRating('${rating.id}')">Delete</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+    
+    renderAggregatedRatings(ratings) {
+        // Filter to only break strategy ratings
+        const strategyRatings = ratings.filter(r => r.ratingType === 'break_strategy');
+        
+        if (strategyRatings.length === 0) {
+            this.elements.aggregatedRatings.innerHTML = '<div class="loading">No break strategy ratings found</div>';
+            return;
+        }
+        
+        // Group by strategy ID
+        const groupedByStrategy = {};
+        strategyRatings.forEach(rating => {
+            const strategyId = rating.breakStrategyId;
+            if (!groupedByStrategy[strategyId]) {
+                groupedByStrategy[strategyId] = [];
+            }
+            groupedByStrategy[strategyId].push(rating);
+        });
+        
+        // Calculate aggregated stats for each strategy
+        const aggregatedData = Object.entries(groupedByStrategy).map(([strategyId, ratings]) => {
+            const strategy = this.strategies.find(s => s.id === strategyId);
+            
+            // Calculate averages
+            const effectiveness = ratings.filter(r => r.effectiveness).map(r => r.effectiveness);
+            const ease = ratings.filter(r => r.ease).map(r => r.ease);
+            const timing = ratings.filter(r => r.timing).map(r => r.timing);
+            
+            const avgEffectiveness = effectiveness.length > 0 ? 
+                (effectiveness.reduce((a, b) => a + b, 0) / effectiveness.length).toFixed(1) : null;
+            const avgEase = ease.length > 0 ? 
+                (ease.reduce((a, b) => a + b, 0) / ease.length).toFixed(1) : null;
+            const avgTiming = timing.length > 0 ? 
+                (timing.reduce((a, b) => a + b, 0) / timing.length).toFixed(1) : null;
+            
+            // Group by context for breakdown
+            const contextBreakdown = {};
+            ratings.forEach(rating => {
+                const contextId = rating.activityContextId;
+                if (!contextBreakdown[contextId]) {
+                    contextBreakdown[contextId] = [];
+                }
+                contextBreakdown[contextId].push(rating);
+            });
+            
+            return {
+                strategy,
+                ratings,
+                avgEffectiveness,
+                avgEase,
+                avgTiming,
+                totalRatings: ratings.length,
+                contextBreakdown
+            };
+        });
+        
+        // Sort by average effectiveness (highest first)
+        aggregatedData.sort((a, b) => {
+            const aEff = parseFloat(a.avgEffectiveness) || 0;
+            const bEff = parseFloat(b.avgEffectiveness) || 0;
+            return bEff - aEff;
+        });
+        
+        this.elements.aggregatedRatings.innerHTML = aggregatedData.map(data => {
+            const contextBreakdownHtml = Object.entries(data.contextBreakdown).map(([contextId, contextRatings]) => {
+                const context = this.contexts.find(c => c.id === contextId) || { name: 'Unknown Context' };
+                const contextEffectiveness = contextRatings.filter(r => r.effectiveness).map(r => r.effectiveness);
+                const avgContextEff = contextEffectiveness.length > 0 ? 
+                    (contextEffectiveness.reduce((a, b) => a + b, 0) / contextEffectiveness.length).toFixed(1) : '—';
+                
+                return `
+                    <div class="context-breakdown-item">
+                        <div class="context-breakdown-name">${this.escapeHtml(context.name)}</div>
+                        <div class="context-breakdown-stats">
+                            <span>Avg: ${avgContextEff}/5</span>
+                            <span>${contextRatings.length} ratings</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            return `
+                <div class="aggregated-strategy">
+                    <div class="aggregated-strategy-header">
+                        <div class="aggregated-strategy-name">${this.escapeHtml(data.strategy?.name || 'Unknown Strategy')}</div>
+                        <div class="aggregated-strategy-meta">
+                            ${data.strategy?.breakType?.replace('_', ' ') || 'Unknown type'} • 
+                            ${data.totalRatings} rating${data.totalRatings !== 1 ? 's' : ''}
+                        </div>
+                    </div>
+                    
+                    <div class="aggregated-stats">
+                        ${data.avgEffectiveness ? `
+                            <div class="aggregated-stat">
+                                <div class="aggregated-stat-label">Effectiveness</div>
+                                <div class="aggregated-stat-value">${data.avgEffectiveness}/5</div>
+                                <div class="aggregated-stat-count">${data.ratings.filter(r => r.effectiveness).length} ratings</div>
+                            </div>
+                        ` : ''}
+                        ${data.avgEase ? `
+                            <div class="aggregated-stat">
+                                <div class="aggregated-stat-label">Ease of Use</div>
+                                <div class="aggregated-stat-value">${data.avgEase}/5</div>
+                                <div class="aggregated-stat-count">${data.ratings.filter(r => r.ease).length} ratings</div>
+                            </div>
+                        ` : ''}
+                        ${data.avgTiming ? `
+                            <div class="aggregated-stat">
+                                <div class="aggregated-stat-label">Timing</div>
+                                <div class="aggregated-stat-value">${data.avgTiming}/5</div>
+                                <div class="aggregated-stat-count">${data.ratings.filter(r => r.timing).length} ratings</div>
+                            </div>
+                        ` : ''}
+                    </div>
+                    
+                    ${Object.keys(data.contextBreakdown).length > 1 ? `
+                        <div class="context-breakdown">
+                            <div class="context-breakdown-title">By Activity Context:</div>
+                            ${contextBreakdownHtml}
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+    }
+    
+    async editRating(ratingId) {
+        // For now, just show a message - full edit functionality can be added later
+        this.setStatus('Rating edit functionality not yet implemented');
+    }
+    
+    async deleteRating(ratingId) {
+        if (!confirm('Are you sure you want to delete this rating?')) return;
+        
+        try {
+            this.db.strategyRatings = this.db.strategyRatings.filter(r => r.id !== ratingId);
+            await this.saveDatabase();
+            this.filterAndRenderReview();
+            this.setStatus('Rating deleted');
+        } catch (error) {
+            console.error('Failed to delete rating:', error);
+            this.setStatus('Failed to delete rating', 'error');
         }
     }
     

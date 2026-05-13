@@ -31,6 +31,7 @@
             <button class="tab-btn active" data-tab="packs">Packs</button>
             <button class="tab-btn" data-tab="create">Create Pack</button>
             <button class="tab-btn" data-tab="reminders">Reminders</button>
+            <button class="tab-btn" data-tab="review">Review</button>
             <button class="tab-btn" data-tab="contexts">Contexts</button>
             <button class="tab-btn" data-tab="strategies">Break Strategies</button>
             <button class="tab-btn" data-tab="config">Config</button>
@@ -166,6 +167,39 @@
                 <button id="add-reminder-btn" class="btn btn-primary">Add Reminder</button>
             </div>
             <div class="reminders-list" id="reminders-list"></div>
+        </div>
+
+        <!-- Review Tab -->
+        <div class="tab-content" id="review-tab">
+            <div class="tab-header">
+                <h3>Ratings Review</h3>
+                <div class="review-filters">
+                    <select id="review-filter-type">
+                        <option value="all">All Ratings</option>
+                        <option value="overall">Overall Session</option>
+                        <option value="context">Activity Context</option>
+                        <option value="label">Task Type</option>
+                        <option value="strategy">Break Strategy</option>
+                    </select>
+                    <select id="review-filter-context">
+                        <option value="">All Contexts</option>
+                    </select>
+                    <select id="review-view-mode">
+                        <option value="individual">Individual Ratings</option>
+                        <option value="aggregated">Aggregated by Strategy</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="review-content">
+                <div class="review-individual" id="review-individual">
+                    <div class="ratings-list" id="ratings-list"></div>
+                </div>
+                
+                <div class="review-aggregated" id="review-aggregated" style="display: none;">
+                    <div class="aggregated-ratings" id="aggregated-ratings"></div>
+                </div>
+            </div>
         </div>
 
         <!-- Contexts Tab -->

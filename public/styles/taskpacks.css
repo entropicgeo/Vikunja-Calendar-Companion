@@ -989,6 +989,211 @@
     margin-bottom: 10px;
 }
 
+/* Review Tab Styles */
+.review-filters {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.review-filters select {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--input-bg);
+    color: var(--text-primary);
+    font-size: 13px;
+}
+
+.review-content {
+    margin-top: 20px;
+}
+
+.ratings-list {
+    display: grid;
+    gap: 15px;
+}
+
+.rating-item {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    transition: all 0.2s ease;
+}
+
+.rating-item:hover {
+    border-color: var(--primary);
+}
+
+.rating-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 12px;
+}
+
+.rating-item-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.rating-item-meta {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.rating-item-type {
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    background: var(--hover-bg);
+    color: var(--text-secondary);
+}
+
+.rating-item-scores {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+    margin: 12px 0;
+}
+
+.rating-score {
+    text-align: center;
+}
+
+.rating-score-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.rating-score-value {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.rating-item-notes {
+    background: var(--hover-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    margin-top: 12px;
+    font-size: 14px;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+}
+
+.rating-item-notes:empty::before {
+    content: "(no notes)";
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+.rating-item-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.aggregated-ratings {
+    display: grid;
+    gap: 20px;
+}
+
+.aggregated-strategy {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+}
+
+.aggregated-strategy-header {
+    margin-bottom: 16px;
+}
+
+.aggregated-strategy-name {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+}
+
+.aggregated-strategy-meta {
+    font-size: 14px;
+    color: var(--text-secondary);
+}
+
+.aggregated-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.aggregated-stat {
+    text-align: center;
+    background: var(--hover-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+}
+
+.aggregated-stat-label {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+}
+
+.aggregated-stat-value {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--primary);
+}
+
+.aggregated-stat-count {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 2px;
+}
+
+.context-breakdown {
+    margin-top: 16px;
+}
+
+.context-breakdown-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+}
+
+.context-breakdown-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--hover-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 6px;
+}
+
+.context-breakdown-name {
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.context-breakdown-stats {
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .tab-nav {
@@ -996,8 +1201,25 @@
     }
     
     .tab-btn {
-        flex: 1 1 calc(33% - 1px);
-        min-width: 100px;
+        flex: 1 1 calc(25% - 1px);
+        min-width: 80px;
+    }
+    
+    .review-filters {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .review-filters select {
+        width: 100%;
+    }
+    
+    .aggregated-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .rating-item-scores {
+        grid-template-columns: 1fr 1fr;
     }
     
     .pack-controls {
