@@ -574,7 +574,30 @@ class TaskPacksApp {
             return;
         }
         
-        this.elements.packsList.innerHTML = packs.map(pack => {
+        // Sort packs chronologically by earliest task due date, then by creation time
+        const sortedPacks = [...packs].sort((a, b) => {
+            const aEarliestTask = this.getPackEarliestTask(a);
+            const bEarliestTask = this.getPackEarliestTask(b);
+            
+            // Compare by earliest task due date
+            if (aEarliestTask && bEarliestTask) {
+                const aDate = new Date(aEarliestTask.due_date);
+                const bDate = new Date(bEarliestTask.due_date);
+                const dateComparison = aDate.getTime() - bDate.getTime();
+                if (dateComparison !== 0) return dateComparison;
+            } else if (aEarliestTask && !bEarliestTask) {
+                return -1;
+            } else if (!aEarliestTask && bEarliestTask) {
+                return 1;
+            }
+            
+            // Fall back to creation time
+            const aCreated = new Date(a.createdAt);
+            const bCreated = new Date(b.createdAt);
+            return aCreated.getTime() - bCreated.getTime();
+        });
+        
+        this.elements.packsList.innerHTML = sortedPacks.map(pack => {
             const tasks = pack.subtaskIds.map(id => 
                 this.allTasks.find(t => t.id === id)
             ).filter(Boolean);
@@ -584,11 +607,17 @@ class TaskPacksApp {
                 this.strategies.find(s => s.id === id)
             ).filter(Boolean);
             
+            const packLabel = this.getPackLabel(pack);
+            const labelHtml = packLabel ? this.renderPackLabel(packLabel) : '';
+            
             return `
                 <div class="pack-item">
                     <div class="pack-item-header">
                         <div>
-                            <div class="pack-item-title">${this.escapeHtml(pack.title)}</div>
+                            <div class="pack-item-title">
+                                ${this.escapeHtml(pack.title)}
+                                ${labelHtml}
+                            </div>
                             <div class="pack-item-meta">
                                 ${context ? context.name : 'No context'} • 
                                 ${strategies.length} strategies • 
@@ -2272,6 +2301,34 @@ class TaskPacksApp {
             const currentDate = new Date(current.due_date);
             return currentDate < earliestDate ? current : earliest;
         });
+    }
+    
+    getPackEarliestTask(pack) {
+        const tasks = pack.subtaskIds.map(id => 
+            this.allTasks.find(t => t.id === id)
+        ).filter(Boolean);
+        
+        return this.getEarliestTask(tasks);
+    }
+    
+    getPackLabel(pack) {
+        // Get the earliest task to inherit its label
+        const earliestTask = this.getPackEarliestTask(pack);
+        if (!earliestTask || !earliestTask.labels || !Array.isArray(earliestTask.labels) || earliestTask.labels.length === 0) {
+            return null;
+        }
+        
+        return earliestTask.labels[0]; // Use first label
+    }
+    
+    renderPackLabel(label) {
+        const color = label.hex_color || label.color;
+        if (!color) return '';
+        
+        const backgroundColor = color.startsWith('#') ? color : `#${color}`;
+        const textColor = this.getTextColorForBackground(backgroundColor);
+        
+        return `<span class="pack-label" style="background-color: ${backgroundColor}; color: ${textColor};">${this.escapeHtml(label.title || 'Label')}</span>`;
     }
     
     getAssignedTaskIdsForDate(date) {
