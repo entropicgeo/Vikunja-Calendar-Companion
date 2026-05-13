@@ -79,9 +79,42 @@
                     <div class="task-selection">
                         <div class="task-filters">
                             <input type="text" id="task-filter" placeholder="Filter tasks...">
-                            <select id="project-filter">
-                                <option value="">All projects</option>
-                            </select>
+                            <div class="filter-row">
+                                <div class="filter-group">
+                                    <label for="project-filter-select">Projects:</label>
+                                    <div class="multi-select-container">
+                                        <div class="multi-select-display" id="project-filter-display">
+                                            <span class="placeholder">All projects</span>
+                                        </div>
+                                        <div class="multi-select-dropdown" id="project-filter-dropdown">
+                                            <div class="multi-select-search">
+                                                <input type="text" id="project-search" placeholder="Search projects...">
+                                            </div>
+                                            <div class="multi-select-options" id="project-options"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="filter-group">
+                                    <label for="label-filter-select">Labels:</label>
+                                    <div class="multi-select-container">
+                                        <div class="multi-select-display" id="label-filter-display">
+                                            <span class="placeholder">All labels</span>
+                                        </div>
+                                        <div class="multi-select-dropdown" id="label-filter-dropdown">
+                                            <div class="multi-select-search">
+                                                <input type="text" id="label-search" placeholder="Search labels...">
+                                            </div>
+                                            <div class="multi-select-options" id="label-options"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="filter-options">
+                                <label>
+                                    <input type="checkbox" id="filter-by-date" checked>
+                                    Only show tasks due on selected date
+                                </label>
+                            </div>
                         </div>
                         <div class="task-list" id="available-tasks"></div>
                     </div>

@@ -78,10 +78,15 @@ class TaskPacksApp {
         
         this.allTasks = [];
         this.allProjects = [];
+        this.allLabels = [];
         this.contexts = [];
         this.strategies = [];
         this.packs = [];
         this.sessions = [];
+        
+        // Filter state
+        this.selectedProjects = new Set();
+        this.selectedLabels = new Set();
         
         this.init();
     }
@@ -293,7 +298,11 @@ class TaskPacksApp {
         this.elements.clearFormBtn.addEventListener('click', () => this.clearCreateForm());
         
         this.elements.taskFilter.addEventListener('input', () => this.filterTasks());
-        this.elements.projectFilter.addEventListener('change', () => this.filterTasks());
+        document.getElementById('filter-by-date').addEventListener('change', () => this.filterTasks());
+        
+        // Multi-select dropdowns
+        this.setupMultiSelectDropdown('project');
+        this.setupMultiSelectDropdown('label');
         
         // Config
         this.elements.saveConfigBtn.addEventListener('click', () => this.saveConfig());
@@ -361,9 +370,10 @@ class TaskPacksApp {
         try {
             this.setStatus('Loading data...');
             
-            // Load tasks and projects from Vikunja
+            // Load tasks, projects, and labels from Vikunja
             await this.loadTasks();
             await this.loadProjects();
+            await this.loadLabels();
             
             // Load local data
             this.contexts = this.db.activityContexts || [];
@@ -422,6 +432,37 @@ class TaskPacksApp {
         } catch (error) {
             console.error('Failed to load projects:', error);
             // Continue without projects if they can't be loaded
+        }
+    }
+    
+    async loadLabels() {
+        try {
+            const labels = [];
+            const perPage = 50;
+            let page = 1;
+            
+            while (true) {
+                const url = new URL('/api/labels', window.location.origin);
+                url.searchParams.set('page', String(page));
+                url.searchParams.set('per_page', String(perPage));
+                
+                const response = await fetch(url.toString());
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch labels: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (!Array.isArray(data) || data.length === 0) break;
+                
+                labels.push(...data);
+                if (data.length < perPage) break;
+                page++;
+            }
+            
+            this.allLabels = labels;
+        } catch (error) {
+            console.error('Failed to load labels:', error);
+            // Continue without labels if they can't be loaded
         }
     }
     
@@ -499,14 +540,9 @@ class TaskPacksApp {
     }
     
     async loadCreatePackData() {
-        // Populate project filter
-        this.elements.projectFilter.innerHTML = '<option value="">All projects</option>';
-        this.allProjects.forEach(project => {
-            const option = document.createElement('option');
-            option.value = project.id;
-            option.textContent = project.title || `Project ${project.id}`;
-            this.elements.projectFilter.appendChild(option);
-        });
+        // Populate multi-select dropdowns
+        this.populateProjectOptions();
+        this.populateLabelOptions();
         
         // Populate activity context
         this.elements.activityContext.innerHTML = '<option value="">Select context...</option>';
@@ -526,7 +562,8 @@ class TaskPacksApp {
     
     filterTasks() {
         const filterText = this.elements.taskFilter.value.toLowerCase();
-        const projectId = this.elements.projectFilter.value ? parseInt(this.elements.projectFilter.value) : null;
+        const filterByDate = document.getElementById('filter-by-date').checked;
+        const selectedDate = this.currentDate;
         
         let filtered = [...this.allTasks];
         
@@ -537,9 +574,28 @@ class TaskPacksApp {
             );
         }
         
-        // Filter by project
-        if (projectId) {
-            filtered = filtered.filter(task => task.project_id === projectId);
+        // Filter by selected projects
+        if (this.selectedProjects.size > 0) {
+            filtered = filtered.filter(task => 
+                this.selectedProjects.has(task.project_id)
+            );
+        }
+        
+        // Filter by selected labels
+        if (this.selectedLabels.size > 0) {
+            filtered = filtered.filter(task => {
+                if (!task.labels || !Array.isArray(task.labels)) return false;
+                return task.labels.some(label => this.selectedLabels.has(label.id));
+            });
+        }
+        
+        // Filter by due date if enabled
+        if (filterByDate && selectedDate) {
+            filtered = filtered.filter(task => {
+                if (!task.due_date) return false;
+                const taskDueDate = new Date(task.due_date).toISOString().split('T')[0];
+                return taskDueDate === selectedDate;
+            });
         }
         
         // Sort by title
@@ -713,8 +769,16 @@ class TaskPacksApp {
         this.elements.packTitle.value = '';
         this.elements.packDescription.value = '';
         this.elements.taskFilter.value = '';
-        this.elements.projectFilter.value = '';
         this.elements.activityContext.value = '';
+        
+        // Clear multi-select filters
+        this.selectedProjects.clear();
+        this.selectedLabels.clear();
+        this.updateMultiSelectDisplay('project');
+        this.updateMultiSelectDisplay('label');
+        
+        // Reset date filter
+        document.getElementById('filter-by-date').checked = true;
         
         // Clear task selections
         this.elements.availableTasks.querySelectorAll('.task-checkbox').forEach(cb => {
@@ -1217,6 +1281,206 @@ class TaskPacksApp {
             console.error('Failed to save rating:', error);
             this.setStatus('Failed to save rating', 'error');
         }
+    }
+    
+    // Multi-select dropdown methods
+    setupMultiSelectDropdown(type) {
+        const display = document.getElementById(`${type}-filter-display`);
+        const dropdown = document.getElementById(`${type}-filter-dropdown`);
+        const search = document.getElementById(`${type}-search`);
+        
+        // Toggle dropdown
+        display.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const isOpen = dropdown.classList.contains('open');
+            
+            // Close all other dropdowns
+            document.querySelectorAll('.multi-select-dropdown.open').forEach(dd => {
+                dd.classList.remove('open');
+                dd.previousElementSibling.classList.remove('open');
+            });
+            
+            if (!isOpen) {
+                dropdown.classList.add('open');
+                display.classList.add('open');
+                search.focus();
+            }
+        });
+        
+        // Search functionality
+        search.addEventListener('input', () => {
+            this.filterMultiSelectOptions(type, search.value);
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.multi-select-container')) {
+                dropdown.classList.remove('open');
+                display.classList.remove('open');
+            }
+        });
+    }
+    
+    populateProjectOptions() {
+        const container = document.getElementById('project-options');
+        container.innerHTML = '';
+        
+        this.allProjects.forEach(project => {
+            const option = document.createElement('div');
+            option.className = 'multi-select-option';
+            option.dataset.value = project.id;
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = this.selectedProjects.has(project.id);
+            checkbox.addEventListener('change', () => {
+                this.toggleProjectSelection(project.id);
+            });
+            
+            const label = document.createElement('span');
+            label.className = 'multi-select-option-label';
+            label.textContent = project.title || `Project ${project.id}`;
+            
+            option.appendChild(checkbox);
+            option.appendChild(label);
+            container.appendChild(option);
+            
+            // Click handler for the entire option
+            option.addEventListener('click', (e) => {
+                if (e.target !== checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    this.toggleProjectSelection(project.id);
+                }
+            });
+        });
+    }
+    
+    populateLabelOptions() {
+        const container = document.getElementById('label-options');
+        container.innerHTML = '';
+        
+        this.allLabels.forEach(label => {
+            const option = document.createElement('div');
+            option.className = 'multi-select-option';
+            option.dataset.value = label.id;
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.checked = this.selectedLabels.has(label.id);
+            checkbox.addEventListener('change', () => {
+                this.toggleLabelSelection(label.id);
+            });
+            
+            const labelSpan = document.createElement('span');
+            labelSpan.className = 'multi-select-option-label';
+            labelSpan.textContent = label.title || `Label ${label.id}`;
+            
+            // Add color indicator if available
+            if (label.hex_color) {
+                const colorIndicator = document.createElement('span');
+                colorIndicator.style.display = 'inline-block';
+                colorIndicator.style.width = '12px';
+                colorIndicator.style.height = '12px';
+                colorIndicator.style.borderRadius = '50%';
+                colorIndicator.style.backgroundColor = label.hex_color.startsWith('#') ? label.hex_color : `#${label.hex_color}`;
+                colorIndicator.style.marginRight = '6px';
+                labelSpan.prepend(colorIndicator);
+            }
+            
+            option.appendChild(checkbox);
+            option.appendChild(labelSpan);
+            container.appendChild(option);
+            
+            // Click handler for the entire option
+            option.addEventListener('click', (e) => {
+                if (e.target !== checkbox) {
+                    checkbox.checked = !checkbox.checked;
+                    this.toggleLabelSelection(label.id);
+                }
+            });
+        });
+    }
+    
+    filterMultiSelectOptions(type, searchText) {
+        const container = document.getElementById(`${type}-options`);
+        const options = container.querySelectorAll('.multi-select-option');
+        
+        options.forEach(option => {
+            const label = option.querySelector('.multi-select-option-label').textContent.toLowerCase();
+            const matches = label.includes(searchText.toLowerCase());
+            option.style.display = matches ? 'flex' : 'none';
+        });
+    }
+    
+    toggleProjectSelection(projectId) {
+        if (this.selectedProjects.has(projectId)) {
+            this.selectedProjects.delete(projectId);
+        } else {
+            this.selectedProjects.add(projectId);
+        }
+        this.updateMultiSelectDisplay('project');
+        this.filterTasks();
+    }
+    
+    toggleLabelSelection(labelId) {
+        if (this.selectedLabels.has(labelId)) {
+            this.selectedLabels.delete(labelId);
+        } else {
+            this.selectedLabels.add(labelId);
+        }
+        this.updateMultiSelectDisplay('label');
+        this.filterTasks();
+    }
+    
+    updateMultiSelectDisplay(type) {
+        const display = document.getElementById(`${type}-filter-display`);
+        const selectedSet = type === 'project' ? this.selectedProjects : this.selectedLabels;
+        const allItems = type === 'project' ? this.allProjects : this.allLabels;
+        
+        // Clear current display
+        display.innerHTML = '';
+        
+        if (selectedSet.size === 0) {
+            const placeholder = document.createElement('span');
+            placeholder.className = 'placeholder';
+            placeholder.textContent = type === 'project' ? 'All projects' : 'All labels';
+            display.appendChild(placeholder);
+        } else {
+            selectedSet.forEach(id => {
+                const item = allItems.find(i => i.id === id);
+                if (item) {
+                    const tag = document.createElement('span');
+                    tag.className = 'multi-select-tag';
+                    
+                    const text = document.createElement('span');
+                    text.textContent = item.title || item.name || `${type} ${id}`;
+                    
+                    const remove = document.createElement('span');
+                    remove.className = 'remove';
+                    remove.textContent = '×';
+                    remove.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (type === 'project') {
+                            this.toggleProjectSelection(id);
+                        } else {
+                            this.toggleLabelSelection(id);
+                        }
+                    });
+                    
+                    tag.appendChild(text);
+                    tag.appendChild(remove);
+                    display.appendChild(tag);
+                }
+            });
+        }
+        
+        // Update checkboxes in dropdown
+        const container = document.getElementById(`${type}-options`);
+        const checkboxes = container.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+            const optionValue = parseInt(checkbox.closest('.multi-select-option').dataset.value);
+            checkbox.checked = selectedSet.has(optionValue);
+        });
     }
     
     // Utility methods
