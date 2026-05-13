@@ -1113,6 +1113,9 @@ class TaskPacksApp {
         this.timerStartTime = Date.now() - (this.timerElapsed * 1000);
         this.timerPaused = false;
         
+        // Update display immediately to show correct initial time
+        this.updateTimerDisplay();
+        
         this.timer = setInterval(() => {
             this.updateTimerDisplay();
         }, 1000);
@@ -1215,7 +1218,12 @@ class TaskPacksApp {
             return;
         }
         
-        this.timerElapsed = Math.floor((Date.now() - this.timerStartTime) / 1000);
+        // Only calculate elapsed time if timer is actually running and start time is set
+        if (this.timerStartTime) {
+            this.timerElapsed = Math.floor((Date.now() - this.timerStartTime) / 1000);
+            // Ensure elapsed time is never negative
+            this.timerElapsed = Math.max(0, this.timerElapsed);
+        }
         
         const hours = Math.floor(this.timerElapsed / 3600);
         const minutes = Math.floor((this.timerElapsed % 3600) / 60);
