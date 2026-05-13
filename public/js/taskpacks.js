@@ -2720,22 +2720,59 @@ class TaskPacksApp {
             return;
         }
         
-        const matchingTasks = this.allTasks.filter(task => 
-            (task.title || '').toLowerCase().includes(searchText) && !task.done
-        ).slice(0, 10); // Limit to 10 results
+        const today = new Date().toISOString().split('T')[0];
+        
+        // Filter tasks for today, not done, and matching search text
+        let matchingTasks = this.allTasks.filter(task => {
+            if (task.done) return false;
+            if (!(task.title || '').toLowerCase().includes(searchText)) return false;
+            
+            // Check if task is due today
+            if (task.due_date) {
+                const taskDueDate = new Date(task.due_date).toISOString().split('T')[0];
+                return taskDueDate === today;
+            }
+            
+            return false;
+        });
+        
+        // Sort tasks: task pack parent tasks first, then by title
+        matchingTasks.sort((a, b) => {
+            const aIsTaskPack = this.isTaskPackParentTask(a);
+            const bIsTaskPack = this.isTaskPackParentTask(b);
+            
+            // Task pack parent tasks come first
+            if (aIsTaskPack && !bIsTaskPack) return -1;
+            if (!aIsTaskPack && bIsTaskPack) return 1;
+            
+            // Then sort by title
+            return (a.title || '').localeCompare(b.title || '');
+        });
+        
+        // Limit to 10 results
+        matchingTasks = matchingTasks.slice(0, 10);
         
         if (matchingTasks.length === 0) {
-            resultsContainer.innerHTML = '<div class="task-search-result">No matching tasks found</div>';
+            resultsContainer.innerHTML = '<div class="task-search-result">No matching tasks found for today</div>';
             resultsContainer.style.display = 'block';
             return;
         }
         
-        resultsContainer.innerHTML = matchingTasks.map(task => `
-            <div class="task-search-result" data-task-id="${task.id}" data-search-type="${searchInputId}">
-                <div class="task-search-result-title">${this.escapeHtml(task.title || `Task ${task.id}`)}</div>
-                <div class="task-search-result-meta">Project: ${task.project_id || 'None'}</div>
-            </div>
-        `).join('');
+        resultsContainer.innerHTML = matchingTasks.map(task => {
+            const labelColor = this.getTaskLabelColor(task);
+            const textColor = labelColor ? this.getTextColorForBackground(labelColor) : '';
+            const styleAttr = labelColor ? `style="background-color: ${labelColor}; color: ${textColor};"` : '';
+            const isTaskPack = this.isTaskPackParentTask(task);
+            
+            return `
+                <div class="task-search-result" data-task-id="${task.id}" data-search-type="${searchInputId}" ${styleAttr}>
+                    <div class="task-search-result-title">
+                        ${isTaskPack ? '📦 ' : ''}${this.escapeHtml(task.title || `Task ${task.id}`)}
+                    </div>
+                    <div class="task-search-result-meta">Project: ${task.project_id || 'None'}</div>
+                </div>
+            `;
+        }).join('');
         
         // Add click handlers
         resultsContainer.querySelectorAll('.task-search-result').forEach(result => {
