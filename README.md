@@ -73,9 +73,10 @@ when it helps with planning ahead, but otherwise leaving it disabled or limiting
    
     The app stores some configuration details in-browser, like label filter selections and date field. You can clear browser data with the Clear browser data button.
     The app will communicate with your Vikunja instance via the protocol you set and that Vikunja allows - if you use HTTP as your API_BASE_URL, your token could be exposed,
-    so don't do that on an insecure network. Your token and Vikunja URL is not persisted by the application.
+    so don't do that on an insecure network. Your token and Vikunja URL is not persisted by the application. Calendar day labels (i.e. 6/1 is "red") are persisted server-side
+    in a lowdb json file.
    
-4. Concurrent use with Vikunja
+5. Concurrent use with Vikunja
    
     Updates made in Vikunja will not be loaded into the web app without clicking "Load tasks" again. Use with caution if you are editing tasks in Vikunja at the same time;
     editing a task description in Vikunja, then moving the tasks in the calendar app without reloading tasks will result in those changes getting overwritten.
@@ -174,9 +175,16 @@ services:
     image: ghcr.io/entropicgeo/vikunja-calendar-companion:latest
     ports:
       - 8088:3000
+    environment:
+      - DB_PATH=/data
+    volumes:
+      - /path/to/data:/data
     env_file:
       - .env
 ```
+
+Replace `/path/to/data` with a path to a directory where you would like to save the Calendar day labels. This is saved
+as a lowdb json file.
 
 # Screenshots
 Recurring events will be projected a duration ahead on the calendar (only originating event can be drag and dropped)
