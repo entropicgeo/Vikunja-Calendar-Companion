@@ -25,6 +25,7 @@ const els = {
   clearBrowserBtn: document.getElementById('clearBrowserBtn'),
   showRecurring: document.getElementById('showRecurring'),
   projectionWeeks: document.getElementById('projectionWeeks'),
+  iconLabelsToggle: document.getElementById('iconLabelsToggle'),
   clearSelectionBtn: document.getElementById('clearSelectionBtn'),
   selectedCount: document.getElementById('selectedCount'),
   markDoneArea: document.getElementById('markDoneArea'),
@@ -43,6 +44,7 @@ function saveConfigToStorage() {
     labelSelectionById: labelSelectionById,
     showRecurring: cfg.showRecurring,
     projectionWeeks: cfg.projectionWeeks,
+    showIconLabels: cfg.showIconLabels,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
@@ -67,6 +69,10 @@ function loadConfigFromStorage() {
     
     if (payload.projectionWeeks) {
       els.projectionWeeks.value = payload.projectionWeeks;
+    }
+
+    if (payload.showIconLabels !== undefined && els.iconLabelsToggle) {
+      els.iconLabelsToggle.checked = payload.showIconLabels;
     }
 
     return true;
@@ -217,6 +223,7 @@ function config() {
   const dateField = els.dateField.value;
   const showRecurring = els.showRecurring.checked;
   const projectionWeeks = parseInt(els.projectionWeeks.value, 10) || 4;
+  const showIconLabels = Boolean(els.iconLabelsToggle?.checked);
 
   const labelSelectionCopy = { ...(labelSelectionById || {}) };
   const selectedLabelIds = new Set(
@@ -230,7 +237,8 @@ function config() {
     labelSelectionById: labelSelectionCopy, 
     selectedLabelIds,
     showRecurring,
-    projectionWeeks
+    projectionWeeks,
+    showIconLabels
   };
 }
 
@@ -240,7 +248,8 @@ function configHash(cfg) {
     d: cfg.dateField, 
     l: cfg.labelSelectionById,
     r: cfg.showRecurring,
-    p: cfg.projectionWeeks
+    p: cfg.projectionWeeks,
+    i: cfg.showIconLabels
   });
 }
 
@@ -321,6 +330,40 @@ function normalizeLabel(label) {
   const title = label?.title ?? label?.name ?? '';
   const color = label?.hex_color ?? label?.color ?? null;
   return { title, color };
+}
+
+function parseIconLabelTitle(title) {
+  if (typeof title !== 'string' || !title.startsWith('icon_')) return null;
+
+  const body = title.slice('icon_'.length);
+  const iconSeparator = body.lastIndexOf('_');
+  if (iconSeparator <= 0 || iconSeparator === body.length - 1) return null;
+
+  const label = body.slice(0, iconSeparator).trim();
+  const icon = body.slice(iconSeparator + 1).trim();
+  if (!label || !icon) return null;
+
+  return { label, icon };
+}
+
+function taskIconLabelDisplay(task) {
+  const labels = Array.isArray(task?.labels) ? task.labels : [];
+
+  for (const l of labels) {
+    const { title } = normalizeLabel(l);
+    const parsed = parseIconLabelTitle(title);
+    if (parsed) return `${parsed.icon} ${parsed.label}`;
+  }
+
+  return null;
+}
+
+function taskDisplayTitle(task, cfg = config()) {
+  if (cfg.showIconLabels) {
+    return taskIconLabelDisplay(task) || '';
+  }
+
+  return task?.title || `(task ${task?.id ?? '?'})`;
 }
 
 function taskMatchesLabelFilter(task, cfg) {
@@ -484,7 +527,7 @@ function renderUnscheduled(tasks) {
 
     const title = document.createElement('div');
     title.className = 'title';
-    title.textContent = task.title || `(task ${task.id})`;
+    title.textContent = taskDisplayTitle(task);
 
     const meta = document.createElement('div');
     meta.className = 'meta';
@@ -518,7 +561,7 @@ function setupExternalDraggable() {
       const task = tasksById.get(id);
       const color = task ? pickEventColor(task) : null;
       return {
-        title: task?.title ?? `(task ${id})`,
+        title: task ? taskDisplayTitle(task) : `(task ${id})`,
         extendedProps: { taskId: id },
         backgroundColor: color || undefined,
         borderColor: color || undefined,
@@ -1428,8 +1471,10 @@ function generateRecurringProjections(task, baseDate, cfg) {
     // Stop if we've gone beyond our projection window
     if (nextDate > projectionEndDate) break;
     
+    const projectionTitle = taskDisplayTitle(task, cfg);
+
     projections.push({
-      title: `${task.title || `(task ${task.id})`} (recurring)`,
+      title: projectionTitle ? `${projectionTitle} (recurring)` : '',
       start: nextDate,
       allDay: !hasSpecificTime, // Only all-day if original task has no specific time
       backgroundColor: color ? `${color}80` : undefined, // 50% opacity
@@ -1487,7 +1532,7 @@ async function refreshUIFromCache(cfg) {
     // Add the actual scheduled event
     calendar.addEvent({
       id: eventId,
-      title: t.title || `(task ${t.id})`,
+      title: taskDisplayTitle(t, cfg),
       start: dt,
       allDay: !hasSpecificTime, // Only all-day if no specific time
       backgroundColor: color || undefined,
@@ -2057,6 +2102,10 @@ function setupColorLabelCustomization() {
     saveConfigToStorage();
     refreshUIFromCache(config());
   });
+  els.iconLabelsToggle?.addEventListener(evt, () => {
+    saveConfigToStorage();
+    refreshUIFromCache(config());
+  });
 });
 
 els.clearBrowserBtn.addEventListener('click', () => {
@@ -2077,6 +2126,7 @@ els.clearBrowserBtn.addEventListener('click', () => {
   // Reset recurring event settings
   els.showRecurring.checked = true;
   els.projectionWeeks.value = '4';
+  if (els.iconLabelsToggle) els.iconLabelsToggle.checked = false;
 
   // Reset label UI
   if (els.labelsPicker) els.labelsPicker.innerHTML = '';
