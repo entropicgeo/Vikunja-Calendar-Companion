@@ -26,6 +26,8 @@ const els = {
   showRecurring: document.getElementById('showRecurring'),
   projectionWeeks: document.getElementById('projectionWeeks'),
   iconLabelsToggle: document.getElementById('iconLabelsToggle'),
+  multiLineTitlesToggle: document.getElementById('multiLineTitlesToggle'),
+  multiLineTitlesControl: document.getElementById('multiLineTitlesControl'),
   clearSelectionBtn: document.getElementById('clearSelectionBtn'),
   selectedCount: document.getElementById('selectedCount'),
   markDoneArea: document.getElementById('markDoneArea'),
@@ -45,6 +47,7 @@ function saveConfigToStorage() {
     showRecurring: cfg.showRecurring,
     projectionWeeks: cfg.projectionWeeks,
     showIconLabels: cfg.showIconLabels,
+    allowMultiLineTitles: cfg.allowMultiLineTitles,
   };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
@@ -73,6 +76,10 @@ function loadConfigFromStorage() {
 
     if (payload.showIconLabels !== undefined && els.iconLabelsToggle) {
       els.iconLabelsToggle.checked = payload.showIconLabels;
+    }
+
+    if (payload.allowMultiLineTitles !== undefined && els.multiLineTitlesToggle) {
+      els.multiLineTitlesToggle.checked = payload.allowMultiLineTitles;
     }
 
     return true;
@@ -224,6 +231,7 @@ function config() {
   const showRecurring = els.showRecurring.checked;
   const projectionWeeks = parseInt(els.projectionWeeks.value, 10) || 4;
   const showIconLabels = Boolean(els.iconLabelsToggle?.checked);
+  const allowMultiLineTitles = Boolean(els.multiLineTitlesToggle?.checked);
 
   const labelSelectionCopy = { ...(labelSelectionById || {}) };
   const selectedLabelIds = new Set(
@@ -238,7 +246,8 @@ function config() {
     selectedLabelIds,
     showRecurring,
     projectionWeeks,
-    showIconLabels
+    showIconLabels,
+    allowMultiLineTitles
   };
 }
 
@@ -249,7 +258,8 @@ function configHash(cfg) {
     l: cfg.labelSelectionById,
     r: cfg.showRecurring,
     p: cfg.projectionWeeks,
-    i: cfg.showIconLabels
+    i: cfg.showIconLabels,
+    m: cfg.allowMultiLineTitles
   });
 }
 
@@ -357,6 +367,14 @@ function taskIconLabelDisplay(task) {
   }
 
   return displays.length > 0 ? displays.join("\n") : null;
+}
+
+function updateTitleDisplayMode(cfg) {
+  const calendarEl = document.getElementById("calendar");
+  calendarEl?.classList.toggle("single-line-event-titles", !cfg.showIconLabels && !cfg.allowMultiLineTitles);
+  if (els.multiLineTitlesControl) {
+    els.multiLineTitlesControl.hidden = cfg.showIconLabels;
+  }
 }
 
 function taskDisplayTitle(task, cfg = config()) {
@@ -1497,6 +1515,7 @@ function generateRecurringProjections(task, baseDate, cfg) {
 
 async function refreshUIFromCache(cfg) {
   ensureCalendar();
+  updateTitleDisplayMode(cfg);
 
   console.log(`Refreshing UI from cache. Current selections: ${Array.from(selectedEvents).join(', ')}`);
   
@@ -1990,6 +2009,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   await fetchServerConfig();
   // Then restore saved settings
   loadConfigFromStorage();
+  updateTitleDisplayMode(config());
   // Then load labels
   await loadLabelsOnly();
   // Load day colors
@@ -2105,6 +2125,12 @@ function setupColorLabelCustomization() {
   });
   els.iconLabelsToggle?.addEventListener(evt, () => {
     saveConfigToStorage();
+    updateTitleDisplayMode(config());
+    refreshUIFromCache(config());
+  });
+  els.multiLineTitlesToggle?.addEventListener(evt, () => {
+    saveConfigToStorage();
+    updateTitleDisplayMode(config());
     refreshUIFromCache(config());
   });
 });
@@ -2128,6 +2154,8 @@ els.clearBrowserBtn.addEventListener('click', () => {
   els.showRecurring.checked = true;
   els.projectionWeeks.value = '4';
   if (els.iconLabelsToggle) els.iconLabelsToggle.checked = false;
+  if (els.multiLineTitlesToggle) els.multiLineTitlesToggle.checked = true;
+  updateTitleDisplayMode(config());
 
   // Reset label UI
   if (els.labelsPicker) els.labelsPicker.innerHTML = '';
