@@ -295,7 +295,7 @@ button.danger {
   user-select: none;
 }
 .task:active { cursor: grabbing; }
-.task .title { font-size: 13px; font-weight: 620; margin-bottom: 5px; }
+.task .title { font-size: 13px; font-weight: 620; margin-bottom: 5px; white-space: pre-line; }
 .task .meta { font-size: 11px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px; }
 .pill {
   font-size: 11px;
@@ -319,6 +319,7 @@ button.danger {
 
 .fc .fc-toolbar-title { font-size: 16px; }
 .fc .fc-button { border-radius: 10px; }
+.fc .fc-event-title { white-space: pre-line; }
 
 .small {
   font-size: 11px;

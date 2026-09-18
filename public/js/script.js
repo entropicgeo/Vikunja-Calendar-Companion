@@ -348,14 +348,15 @@ function parseIconLabelTitle(title) {
 
 function taskIconLabelDisplay(task) {
   const labels = Array.isArray(task?.labels) ? task.labels : [];
+  const displays = [];
 
   for (const l of labels) {
     const { title } = normalizeLabel(l);
     const parsed = parseIconLabelTitle(title);
-    if (parsed) return `${parsed.icon} ${parsed.label}`;
+    if (parsed) displays.push(`${parsed.icon} ${parsed.label}`);
   }
 
-  return null;
+  return displays.length > 0 ? displays.join("\n") : null;
 }
 
 function taskDisplayTitle(task, cfg = config()) {
